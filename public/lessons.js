@@ -13,9 +13,9 @@ function lesson(id, part, title, goal, story, predict, code, check, worked, chan
     setup:options.setup || 'reset()',kind:options.kind || 'Real Iceberg', minutes:options.minutes || 5};
 }
 export const lessons = [
-lesson('catalog',0,'Find the catalog pointer',
+lesson('catalog',0,'How a query finds its table',
 'Resolve a table name to its current metadata file.',
-'A dashboard asks for shop.orders. The catalog resolves that name to metadata; it does not hold the order rows.',
+'Imagine a sales dashboard querying shop.orders: orders is the table, and shop groups related tables. Before opening data files, the reader asks the catalog which metadata file describes that table now.',
 'Will creating a table create a data file?',
 `show(catalog.list_tables('shop'))
 show({'metadata': table.metadata_location,

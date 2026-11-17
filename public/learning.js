@@ -59,3 +59,36 @@ export const paths = [
 {title:'Design for a workload',desc:'Measure pruning, repair fragmentation and defend a layout.',parts:[2,3,6],start:'baseline',time:'18 lessons'},
 {title:'Operate with confidence',desc:'Investigate commit conflicts, retained history and access boundaries.',parts:[3,4,5],start:'small-files',time:'18 lessons'}
 ];
+
+// Motivation belongs at a section's entry, before the first technical objective.
+export const sectionOpeners = [
+  {title:'Why start here?', paragraphs:[
+    'Suppose your sales data lives in Parquet files. A file tells you what is inside it, but a folder listing cannot reliably tell you which files form the current table. What if a writer has uploaded new files but has not finished its change? Which version should a dashboard read?',
+    'Apache Iceberg is a table format: it adds metadata that describes table states and the files belonging to them. This lets readers use a complete, published table state while writers prepare changes. To understand the performance, safe updates and governance decisions later in this course, we first need to follow how a query finds that state.',
+    'The first step is the catalog, which maps a table name to its current metadata location. We begin with an empty table to make one distinction visible: a table can already have a name, schema (its columns and types) and metadata before it contains any data files.'
+  ]},
+  {title:'Why learn how tables change?', paragraphs:[
+    'Ingestion keeps running while reports need consistent inputs. Column names also change as applications evolve. Rewriting everything for every change would be costly, and confusing old and new columns could silently change a result.',
+    'This section follows snapshots and field IDs: the mechanisms that let Iceberg retain earlier states, reuse files and preserve column identity. Start with the snapshot history so you can explain which state a later query is reading.'
+  ]},
+  {title:'Why measure what gets read?', paragraphs:[
+    'A query can return one row after considering millions. A small result alone therefore cannot tell you whether a layout is efficient.',
+    'This section connects your predicates to the files Iceberg selects. Establish a baseline first, then investigate how bounds and partitioning reduce candidate work. That distinction will help you evaluate a layout using evidence rather than its directory names.'
+  ]},
+  {title:'Why does a correct table need maintenance?', paragraphs:[
+    'A pipeline can produce correct answers while accumulating tiny files and retained history. Queries may do more work, and storage may keep growing even after rows are deleted.',
+    'This section separates the current logical table from its physical and historical files. Begin with tiny batches to see how ingestion choices create the maintenance work you will later need to budget and perform safely.'
+  ]},
+  {title:'Why study failed commits?', paragraphs:[
+    'A production table often has more than one writer. Two jobs may each prepare a valid change using the same starting state, but the first successful commit can invalidate the second job’s assumptions.',
+    'This section examines publication, conflict validation and retries. Begin by deliberately causing a stale schema commit to fail, so you can distinguish protection against lost changes from an error that should simply be retried.'
+  ]},
+  {title:'Why look beyond the query interface?', paragraphs:[
+    'A table may be hidden in a catalog yet readable through a storage path. A deleted row may disappear from today’s report while remaining in a retained snapshot or export.',
+    'This section traces those separate access and retention paths. Begin with discovery versus file access: understanding that boundary helps you choose where controls must actually be enforced.'
+  ]},
+  {title:'Why does a design need an evidence trail?', paragraphs:[
+    'A layout that helps one dashboard may create more files or do little for another query. A convincing design must balance the workload, write costs, correctness, retention and access requirements.',
+    'This section brings those tradeoffs together. Start by comparing two predicates on the same table, then build a recommendation that states what you observed, what it supports and what still needs production measurement.'
+  ]}
+];

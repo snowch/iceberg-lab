@@ -1,5 +1,5 @@
 import {parts,lessons} from './lessons.js';
-import {support,sectionReviews,paths} from './learning.js';
+import {support,sectionReviews,paths,sectionOpeners} from './learning.js';
 const $ = id => document.getElementById(id);
 const escape = value => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store = {
@@ -112,6 +112,7 @@ function renderLesson(l){
   $('content').innerHTML=`<article class="lesson"><div class="eyebrow">Part ${parts[l.part][0]} / ${parts[l.part][1]}</div>
   <h1>${l.title}</h1><div class="lesson-meta"><span>LESSON ${String(idx+1).padStart(2,'0')} / 42</span><span>≈ ${l.minutes} MIN</span><span class="badge ${l.kind==='Real Iceberg'?'':'model'}">${l.kind}</span></div>
   <nav class="lesson-steps" aria-label="Lesson stages"><a href="#" data-jump="prediction">01 Predict</a><a href="#" data-jump="experiment">02 Investigate</a><a href="#" data-jump="worked">03 Explain</a><a href="#" data-jump="quiz">04 Apply</a></nav>
+  ${idx%6===0?`<section class="section-opener" aria-label="Why this section matters"><h2>${escape(sectionOpeners[l.part].title)}</h2>${sectionOpeners[l.part].paragraphs.map(paragraph=>`<p>${escape(paragraph)}</p>`).join('')}</section>`:''}
   <p class="goal">${escape(l.goal)}</p><p class="story">${escape(l.story)}</p>
   <section class="concept"><span class="step-label">The idea</span><p>${escape(support[l.id].concept)}</p></section>
   <div class="predict" id="prediction"><span class="step-label">01 / Predict</span><div><p>${escape(l.predict)}</p><label class="prediction-label" for="prediction-note">Your prediction and why <span>· optional, saved here</span></label><textarea id="prediction-note" class="learning-note" rows="2" placeholder="I expect… because…">${escape(store.get('prediction:'+l.id,''))}</textarea></div></div>
