@@ -1,6 +1,9 @@
 # Course copy and disclosure audit
 
 Reviewed 17 November 2026 against the published baseline `13afc05`.
+The sentence ledger and UI snapshots record that audit. A subsequent footer refinement
+removed stacked divider lines, grouped optional resources and aligned the review button
+at the start of its own row; its saved progress and notes behavior is preserved.
 
 The review covers all 42 lessons sentence by sentence: objectives, scenarios, predictions,
 instructions, worked explanations, variations, explanation questions and answer choices.

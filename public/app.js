@@ -136,10 +136,9 @@ function renderLesson(l){
   ${diagram(l.id)}
   <section class="change-box"><h2>Try one change</h2><p>${formatCopy(l.change)}</p></section>
   <form class="quiz" id="quiz"><h2>Check your understanding</h2><p class="question">${escape(l.question)}</p>${choices.map(c=>`<label><input type="radio" name="answer" value="${c.index}" required><span>${escape(c.text)}</span></label>`).join('')}<button class="button" type="submit">Check explanation →</button><p class="quiz-feedback" id="quiz-feedback" role="status"></p></form>
-  <details class="lesson-notes"><summary>Your notes (optional)</summary><p>These notes are saved in this browser. They are not submitted or graded.</p><label for="prediction-note">Your prediction and why</label><textarea id="prediction-note" class="learning-note" rows="2" placeholder="I expect… because…">${escape(store.get('prediction:'+l.id,''))}</textarea><label for="reflection-note">Explain it in your own words</label><p>What did you notice, and why does it matter?</p><textarea id="reflection-note" class="learning-note" rows="2" placeholder="I noticed… This matters because…">${escape(store.get('reflection:'+l.id,''))}</textarea></details>
   ${idx%6===5?`<section class="transfer"><span class="step-label">Section ${parts[l.part][0]} / Use it elsewhere</span><h2>${sectionReviews[l.part][0]}</h2><p>${sectionReviews[l.part][1]}</p><details><summary>Review your explanation</summary><ul>${sectionReviews[l.part][2].map(point=>`<li>${point}</li>`).join('')}</ul><p>Explain this without looking back. If a link is missing, revisit one lesson and try again.</p></details></section>`:''}
-  <div class="review-bar"><span id="review-text"></span><button id="review" class="button subtle"></button></div>
-  <section class="study-resources" aria-label="Further study">${renderRecap(l.id)}${references(l)}</section>
+  <div class="review-bar"><button id="review" class="button subtle"></button><span id="review-text" role="status"></span></div>
+  <section class="study-resources" aria-label="Optional notes and further study"><details class="lesson-resource lesson-notes"><summary><span><strong>Your notes (optional)</strong></span></summary><div class="resource-body"><p>These notes are saved in this browser. They are not submitted or graded.</p><label for="prediction-note">Your prediction and why</label><textarea id="prediction-note" class="learning-note" rows="2" placeholder="I expect… because…">${escape(store.get('prediction:'+l.id,''))}</textarea><label for="reflection-note">Explain it in your own words</label><p>What did you notice, and why does it matter?</p><textarea id="reflection-note" class="learning-note" rows="2" placeholder="I noticed… This matters because…">${escape(store.get('reflection:'+l.id,''))}</textarea></div></details>${renderRecap(l.id)}${references(l)}</section>
   <nav class="pagination" aria-label="Lesson navigation"><a href="${prev?'#lesson/'+prev.id:'#'}"><small>← ${prev?'Previous lesson':'Course overview'}</small>${prev?.title||'See the learning path'}</a><a href="${next?'#lesson/'+next.id:'#'}"><small>${next?'Next lesson':'Back to overview'} →</small>${next?.title||'Review your learning'}</a></nav></article>`;
   for(const [element,key] of [['prediction-note','prediction'],['reflection-note','reflection']]){
     $(element).oninput=()=>store.set(key+':'+l.id,$(element).value);
@@ -173,7 +172,8 @@ function updateReview(){
   if(!$('review'))return;
   const done=reviewed.includes(current.id);
   $('review').textContent=done?'✓ Reviewed · undo':'Mark reviewed';
-  $('review-text').textContent=done?'Saved in this browser.':'Track your reading even without running code.';
+  $('review-text').textContent=done?'Saved in this browser.':'';
+  $('review-text').hidden=!done;
 }
 function markReviewed(id){
   if(!reviewed.includes(id)){reviewed.push(id);store.set('reviewed',reviewed);renderNav();updateReview();}

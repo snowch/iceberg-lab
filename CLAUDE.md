@@ -43,6 +43,8 @@ Can the table have metadata before it has any data files?”
   clear purpose, such as attempting a question before revealing its answer.
 - Prefer removing unnecessary content to hiding it. Evaluate every badge, metric card,
   hint, status message and control for its value at that point in the learner’s journey.
+- Group content with spacing and alignment. Use borders only for meaningful boundaries;
+  avoid stacked divider lines around adjacent components.
 - Show controls and status messages when they are useful. Keep one primary action prominent;
   place secondary tools nearby without letting them compete with it.
 - Show relevant output and explain what its quantities mean. Put raw diagnostic detail
