@@ -1,0 +1,19 @@
+{
+  "name": "iceberg-lab",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "assets": "node scripts/build-runtime.mjs",
+    "build": "npm run assets && node scripts/build.mjs",
+    "dev": "npm run build && node scripts/serve.mjs",
+    "test": "node --test tests/content.test.mjs && node tests/wasm.mjs",
+    "test:browser": "playwright test"
+  },
+  "dependencies": {
+    "pyodide": "314.0.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1"
+  }
+}

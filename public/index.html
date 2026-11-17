@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#173f50">
+<meta name="description" content="Learn Apache Iceberg through 42 focused browser lessons. Create real tables, follow snapshots, measure pruning and reason about governance. All computation runs locally in WebAssembly.">
+<title>Iceberg Lab · Understand the table</title>
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./style.css">
+<script type="module" src="./app.js"></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to lesson</a>
+<header class="topbar">
+  <button id="menu" class="icon-button" aria-label="Toggle lesson navigation" aria-expanded="false">☰</button>
+  <a href="#" class="brand"><img src="./icon.svg" width="32" height="32" alt=""><span>Iceberg <strong>Lab</strong></span></a>
+  <span class="top-caption">Understand the table. Explain the tradeoff.</span>
+  <nav aria-label="Site"><a href="#guide">Your laboratory</a><a href="https://github.com/snowch/iceberg-lab">GitHub ↗</a><button id="theme" class="icon-button" aria-label="Switch color theme">◐</button></nav>
+</header>
+<aside class="sidebar" id="sidebar" aria-label="Lessons">
+  <a class="overview-link" href="#">Course overview <span>↗</span></a>
+  <label class="search-label" for="search">Find a lesson</label>
+  <input id="search" type="search" placeholder="Snapshots, pruning, access…">
+  <div class="progress-label"><span id="progress-text">0 of 42 reviewed</span><button id="clear-progress" title="Clear review progress">Clear</button></div>
+  <progress id="progress" max="42" value="0" aria-label="Lessons reviewed"></progress>
+  <div id="lesson-nav"></div>
+  <p id="no-results" hidden>No matching lessons.</p>
+  <div class="sidebar-note">No account. No server.<br>Real Iceberg, running in WASM.</div>
+  <a class="back-site" href="https://snowch.github.io/labs/">← All labs by Chris Snow</a>
+</aside>
+<main id="content" tabindex="-1"></main>
+<footer><span>Iceberg Lab · Chris Snow</span><span>Built for investigation · <a href="#guide">Runtime & limits</a></span></footer>
+</body>
+</html>

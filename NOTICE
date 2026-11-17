@@ -1,0 +1,10 @@
+Iceberg Lab
+
+This project includes adaptations of two files from iancmoritz/apacheprojects:
+https://github.com/iancmoritz/apacheprojects
+- iceberg/python/iceberg_wasm/shims.py -> public/python/shims.py
+- iceberg/scripts/build-runtime.mjs -> scripts/build-runtime.mjs
+
+The upstream files carry Apache Software Foundation Apache-2.0 license headers.
+Those headers are preserved. The runtime script has been modified for proxy-aware
+curl downloads and SHA-256 verification. See THIRD_PARTY_LICENSE_APACHE_2.0.txt.
