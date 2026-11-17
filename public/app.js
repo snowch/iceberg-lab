@@ -1,4 +1,6 @@
 import {parts,lessons} from './lessons.js';
+import {diagram,references} from './visuals.js';
+import {renderRecap} from './recaps.js';
 import {support,sectionReviews,paths,sectionOpeners} from './learning.js';
 const $ = id => document.getElementById(id);
 const escape = value => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -21,15 +23,19 @@ $('theme').onclick=()=>{
 $('menu').onclick=()=>{
   const open=$('sidebar').classList.toggle('open');$('menu').setAttribute('aria-expanded',String(open));
   syncSidebar();
+  if(open){const active=$('sidebar').querySelector('[aria-current=page]');(active||$('search')).focus({preventScroll:true});active?.scrollIntoView({block:'nearest'});}
 };
 const mobile=matchMedia('(max-width:760px)');
-function syncSidebar(){$('sidebar').inert=mobile.matches&&!$('sidebar').classList.contains('open');}
+function syncSidebar(){$('sidebar').inert=!$('sidebar').classList.contains('open');}
 mobile.addEventListener('change',syncSidebar);
 document.addEventListener('keydown',event=>{
-  if(event.key==='Escape'&&mobile.matches&&$('sidebar').classList.contains('open')){
+  if(event.key==='Escape'&&$('sidebar').classList.contains('open')){
     $('sidebar').classList.remove('open');$('menu').setAttribute('aria-expanded','false');syncSidebar();$('menu').focus();
   }
 });
+$('close-course').onclick=()=>{closeCourse();$('menu').focus();};
+function closeCourse(){$('sidebar').classList.remove('open');$('menu').setAttribute('aria-expanded','false');syncSidebar();}
+document.addEventListener('pointerdown',event=>{if($('sidebar').classList.contains('open')&&!$('sidebar').contains(event.target)&&!$('menu').contains(event.target))closeCourse();});
 $('search').oninput=renderNav;
 $('clear-progress').onclick=()=>{reviewed=[];store.set('reviewed',reviewed);renderNav();if(current)updateReview();};
 function renderNav(){
@@ -64,6 +70,7 @@ function home(){
     <div class="map-node">Manifest list<small>Find manifests</small></div><span class="map-arrow">→</span>
     <div class="map-node">Manifests<small>Select files</small></div><span class="map-arrow">→</span>
     <div class="map-node">Data files<small>Read the rows</small></div></div></div></section>
+    <section class="course-readiness" aria-label="Course prerequisites"><h2>Before you start</h2><p>This course is for people who work with tables and want to explain how an Iceberg table behaves. Be familiar with rows and columns. For the experiments, you should be able to read basic SQL (<code>SELECT</code>, <code>WHERE</code>, <code>GROUP BY</code>) and short Python examples using function calls, lists, dictionaries and loops.</p><p>No prior Iceberg, Spark, Java or cloud-platform knowledge is required. Knowing that Parquet stores tabular data in files is helpful; its byte-level details are optional. You can also follow the diagrams, worked explanations and transcripts without running code.</p><a href="#guide">Read the laboratory guide →</a></section>
     <section class="path-section" aria-label="Suggested learning paths"><div class="section-intro"><h2>Choose your way in</h2><p>Start at the beginning, or follow your next question.</p></div><div class="path-grid">${paths.map((path,i)=>`<a class="path-card" href="#lesson/${path.start}"><span class="path-index">0${i+1} / ${path.time}</span><h3>${path.title} <span>→</span></h3><p>${path.desc}</p><small>Sections ${path.parts.map(p=>parts[p][0]).join(' · ')}</small></a>`).join('')}</div><p class="path-note">Every lesson starts with fresh data. If a term is unfamiliar, use “The idea” and the optional hints before running code.</p></section>
     <div class="section-intro"><h2>From a file to a governed table</h2><p>Seven sections. One idea per lesson.</p></div>
     <div class="course-grid">${parts.map(([number,title,desc],part)=>`<section class="part-card"><span class="part-number">PART ${number} / 6 LESSONS</span><h3>${title}</h3><p>${desc}</p><div class="card-lessons">${lessons.filter(l=>l.part===part).map(l=>`<a href="#lesson/${l.id}"><span>${String(lessons.indexOf(l)+1).padStart(2,'0')}</span>${l.title} →</a>`).join('')}</div><span class="section-progress">${lessons.filter(l=>l.part===part&&reviewed.includes(l.id)).length} of 6 reviewed</span></section>`).join('')}</div>
@@ -73,6 +80,7 @@ function home(){
 function guide(){
   $('content').innerHTML=`<article class="guide"><div class="eyebrow">Reference / Your laboratory</div><h1>A real table.<br>Inside your tab.</h1>
   <p class="lead">The page downloads a Python WASM runtime on your first experiment. PyIceberg creates the table, Arrow writes the files, and DuckDB runs SQL locally.</p>
+  <section><h2>Prerequisites and reading paths</h2><p>Start with familiarity with tables, rows and columns. To investigate by editing code, be able to read basic SQL SELECT, WHERE and GROUP BY statements and short Python examples with function calls, lists, dictionaries and loops. This is an Iceberg course, not a first course in SQL or Python.</p><p>You do not need Iceberg, Spark, Java, a cloud account or object-storage administration experience. Knowing what a Parquet file is will help; understanding its binary format is optional. The Parquet lab is a companion, not a required prerequisite.</p><p>For a reading path, use the concept diagrams and worked explanations, then explain each mechanism in your own words. Optional captioned videos and transcripts cover selected processes. Experiment checks provide evidence about the code; they do not certify mastery merely for pressing Run.</p></section>
   <section><h2>How a lesson works</h2><p>Each lesson asks one question. Predict the outcome, run the editable Python, inspect its output and the warehouse, then compare it with the worked result. Try the suggested variation and answer the explanation check.</p><p>Use the optional prediction and reflection notes to record your reasoning. They are saved only in this browser. Hints offer a starting point before revealing what evidence to inspect. Each section ends with an unfamiliar scenario and a self-review rubric; use it to test transfer rather than recognition.</p><p>Every run recreates that lesson’s fixture. It does not continue the previous run or previous lesson. Your code edits and review progress are saved in this browser when storage is available. The warehouse itself is held in worker memory and is lost on reload, stopping the runtime, or starting another experiment.</p><p>Use <strong>Mark reviewed</strong> to track a reading path. It is a personal bookmark, not a certificate. Passing the original code check and the explanation question also marks the lesson reviewed. Variations may deliberately fail the original check; inspect the result and explain why.</p></section>
   <section><h2>What actually runs</h2><table><thead><tr><th>Layer</th><th>Pinned implementation</th></tr></thead><tbody>
   <tr><td>Interpreter</td><td>Pyodide 314.0.3, in a Web Worker</td></tr><tr><td>Table library</td><td>PyIceberg 0.11.1 · format v2 fixtures</td></tr><tr><td>Catalog</td><td>PyIceberg SqlCatalog on local SQLite</td></tr><tr><td>Files</td><td>Real metadata JSON, Avro manifests and Parquet</td></tr><tr><td>Data / SQL</td><td>PyArrow 22.0.0 / DuckDB 1.5.1</td></tr><tr><td>Data</td><td>120 synthetic orders in the default fixture; no personal data</td></tr></tbody></table>
@@ -113,6 +121,7 @@ function renderLesson(l){
   <h1>${l.title}</h1><div class="lesson-meta"><span>LESSON ${String(idx+1).padStart(2,'0')} / 42</span><span>≈ ${l.minutes} MIN</span><span class="badge ${l.kind==='Real Iceberg'?'':'model'}">${l.kind}</span></div>
   <nav class="lesson-steps" aria-label="Lesson stages"><a href="#" data-jump="prediction">01 Predict</a><a href="#" data-jump="experiment">02 Investigate</a><a href="#" data-jump="worked">03 Explain</a><a href="#" data-jump="quiz">04 Apply</a></nav>
   ${idx%6===0?`<section class="section-opener" aria-label="Why this section matters"><h2>${escape(sectionOpeners[l.part].title)}</h2>${sectionOpeners[l.part].paragraphs.map(paragraph=>`<p>${escape(paragraph)}</p>`).join('')}</section>`:''}
+  ${idx===0?'<p class="first-lesson-readiness"><strong>Before you start:</strong> be familiar with tables, rows and columns. Basic SQL and reading short Python examples help with the experiments. Iceberg knowledge is not assumed. You can follow the worked explanations without running code. <a href="#guide">Prerequisites and laboratory guide</a>.</p>':''}
   <p class="goal">${escape(l.goal)}</p><p class="story">${escape(l.story)}</p>
   <section class="concept"><span class="step-label">The idea</span><p>${escape(support[l.id].concept)}</p></section>
   <div class="predict" id="prediction"><div class="stage-heading"><span class="step-label">01 / Predict</span><h2>Make a prediction</h2></div><div><p>${escape(l.predict)}</p><label class="prediction-label" for="prediction-note">Your prediction and why <span>· optional, saved here</span></label><textarea id="prediction-note" class="learning-note" rows="2" placeholder="I expect… because…">${escape(store.get('prediction:'+l.id,''))}</textarea></div></div>
@@ -125,11 +134,13 @@ function renderLesson(l){
   <details class="setup"><summary>Fixture setup & evidence check</summary><p>Executed before your code; each run starts independently.</p><pre>${escape(l.setup)}</pre><p>The evidence check below runs after your code. Variations can legitimately change these expected results.</p><pre>${escape(l.check)}</pre><p><a href="./python/lab.py">Read the fixture helpers</a> · <a href="#guide">Runtime & limits</a></p></details>
   <div id="result" aria-live="polite"></div></section>
   <details class="worked" id="worked"><summary><span class="step-label">03 / Explain</span> <span class="worked-heading">Compare with the worked result</span></summary><p>${escape(l.worked)}</p></details>
+  ${diagram(l.id)}
   <section class="change-box"><div class="step-label">04 / Apply</div><h2>Test your explanation</h2><p>${escape(l.change)}</p></section>
   <form class="quiz" id="quiz"><h2>Explain what happened</h2><p class="question">${escape(l.question)}</p>${choices.map(c=>`<label><input type="radio" name="answer" value="${c.index}" required><span>${escape(c.text)}</span></label>`).join('')}<button class="button" type="submit">Check explanation →</button><p class="quiz-feedback" id="quiz-feedback" role="status"></p></form>
   <section class="reflection"><label for="reflection-note">Explain it in your own words</label><p>What did the evidence change about your prediction? Name one situation where this idea would help.</p><textarea id="reflection-note" class="learning-note" rows="2" placeholder="The evidence shows… This matters when…">${escape(store.get('reflection:'+l.id,''))}</textarea></section>
   ${idx%6===5?`<section class="transfer"><span class="step-label">Section ${parts[l.part][0]} / Use it elsewhere</span><h2>${sectionReviews[l.part][0]}</h2><p>${sectionReviews[l.part][1]}</p><details><summary>Review your explanation</summary><ul>${sectionReviews[l.part][2].map(point=>`<li>${point}</li>`).join('')}</ul><p>Explain this without looking back. If a link is missing, revisit one lesson and try again.</p></details></section>`:''}
   <div class="review-bar"><span id="review-text"></span><button id="review" class="button subtle"></button></div>
+  <section class="study-resources" aria-label="Further study">${renderRecap(l.id)}${references(l)}</section>
   <nav class="pagination" aria-label="Lesson navigation"><a href="${prev?'#lesson/'+prev.id:'#'}"><small>← ${prev?'Previous lesson':'Course overview'}</small>${prev?.title||'See the learning path'}</a><a href="${next?'#lesson/'+next.id:'#'}"><small>${next?'Next lesson':'Back to overview'} →</small>${next?.title||'Review your learning'}</a></nav></article>`;
   for(const [element,key] of [['prediction-note','prediction'],['reflection-note','reflection']]){
     $(element).oninput=()=>store.set(key+':'+l.id,$(element).value);
@@ -158,6 +169,7 @@ function renderLesson(l){
     else reviewed.push(l.id);
     store.set('reviewed',reviewed);renderNav();updateReview();
   };
+  document.querySelectorAll('.recap').forEach(resource=>resource.addEventListener('toggle',()=>{if(!resource.open)resource.querySelector('video')?.pause();}));
   updateRuntime();updateReview();
   if(results.has(l.id))renderResult(results.get(l.id));
 }

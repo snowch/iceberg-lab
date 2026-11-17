@@ -1,0 +1,34 @@
+WEBVTT
+
+00:00:00.500 --> 00:00:05.530
+A writer may finish uploading a new data file before it publishes the table change.
+
+00:00:05.530 --> 00:00:10.445
+If a reader treated every physical file as a member, it could read unfinished work.
+
+00:00:10.445 --> 00:00:14.025
+Iceberg readers instead follow the committed metadata state.
+
+00:00:15.525 --> 00:00:22.350
+In this publication model, the catalog pointer initially names metadata version one, which references file A.
+
+00:00:22.350 --> 00:00:24.605
+File B can already exist.
+
+00:00:24.605 --> 00:00:29.090
+Preparing metadata version two still does not change the reader’s view.
+
+00:00:29.090 --> 00:00:35.515
+Successful publication changes the pointer so readers can resolve a state referencing both A and B.
+
+00:00:37.015 --> 00:00:40.780
+Publication must check the writer’s expected starting state.
+
+00:00:40.780 --> 00:00:45.675
+If another writer has changed it, a blind replacement could lose that change.
+
+00:00:45.675 --> 00:00:50.040
+This lesson models the boundary, not a distributed catalog service.
+
+00:00:50.040 --> 00:00:55.490
+Run the real stale schema commit lesson to observe requirement validation in the local catalog.

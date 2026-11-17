@@ -108,3 +108,80 @@ test('learning notes, progressive hints, actionable feedback and section transfe
   await expect(page.locator('#worked')).toHaveAttribute('open','');
   await expect(page).toHaveURL(/#lesson\/hidden-transforms$/);
 });
+
+test('concept diagrams, references and prerequisites remain readable across lessons and themes',async({page})=>{
+ const {lessons}=await import('../../public/lessons.js');
+ await page.goto('./');
+ await expect(page.getByRole('region',{name:'Course prerequisites'})).toContainText('No prior Iceberg');
+ for(const width of [390,820,1440]){
+  await page.setViewportSize({width,height:900});
+  for(const theme of ['light','dark']){
+   await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+   for(const l of lessons){
+    await page.goto('./#lesson/'+l.id);
+    await expect(page.locator('.concept-diagram')).toHaveCount(1);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),l.id+' '+width+' '+theme).toBe(true);
+   }
+  }
+ }
+ await page.goto('./#lesson/catalog');
+ await expect(page.locator('.first-lesson-readiness')).toContainText('Iceberg knowledge is not assumed');
+ await page.locator('.references>summary').click();
+ await expect(page.locator('.references')).toContainText('Which information exists');
+ await expect(page.locator('.references a').first()).toHaveAttribute('href','https://iceberg.apache.org/spec/#table-metadata');
+ await page.getByText('Compare your explanation',{exact:true}).click();
+ await expect(page.locator('.reference-answer')).toHaveAttribute('open','');
+});
+
+test('optional recaps play, seek and expose captions, transcripts and recovery',async({page})=>{
+ const requests=[];page.on('request',r=>requests.push(r.url()));
+ for(const id of ['snapshots','bounds','atomic-pointer']){
+  await page.goto('./#lesson/'+id);
+  const before=requests.filter(url=>/\.(mp4|webm)$/.test(url)).length;
+  await expect(page.locator('video')).toHaveAttribute('preload','none');
+  expect(requests.filter(url=>/\.(mp4|webm)$/.test(url)).length).toBe(before);
+  await page.locator('.recap>summary').click();
+  await page.locator('video').evaluate(video=>{video.muted=true;return Promise.race([video.play(),new Promise((_,reject)=>setTimeout(()=>reject(new Error('Playback did not start')),10000))]);});
+  await expect.poll(()=>page.locator('video').evaluate(video=>video.currentTime),{timeout:15000}).toBeGreaterThan(0.2);
+  await page.locator('.recap>summary').click();
+  await expect.poll(()=>page.locator('video').evaluate(video=>video.paused)).toBe(true);
+  await page.locator('.recap>summary').click();
+  const duration=await page.locator('video').evaluate(video=>video.duration);expect(duration).toBeGreaterThan(30);
+  await page.locator('video').evaluate(video=>{video.pause();video.currentTime=video.duration-2;});
+  await expect.poll(()=>page.locator('video').evaluate(video=>video.currentTime)).toBeGreaterThan(duration-3);
+  await page.getByText('Read the transcript',{exact:true}).click();
+  await expect(page.locator('.transcript h3')).toHaveCount(3);
+  const track=page.locator('track');await expect(track).toHaveAttribute('kind','captions');
+  expect(await track.evaluate(el=>el.track.cues?.length||0)).toBeGreaterThan(5);
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ }
+ await page.route('**/recap.*',route=>route.abort());
+ await page.goto('./#lesson/bounds');await page.locator('.recap>summary').click();
+ await page.locator('video').evaluate(video=>{video.muted=true;video.play().catch(()=>{});});
+ await expect(page.locator('.media-recovery')).toContainText('use the transcript');
+ await page.getByText('Read the transcript',{exact:true}).click();
+ await expect(page.locator('.transcript p').first()).toContainText('one order');
+});
+
+test('course menu preserves a wide workspace and closes predictably',async({page})=>{
+ await page.goto('./#lesson/bounds');
+ await expect(page.locator('#sidebar')).not.toBeVisible();
+ const prose=await page.locator('.story').boundingBox();const workspace=await page.locator('.experiment').boundingBox();
+ expect(workspace.width).toBeGreaterThan(prose.width+200);
+ await page.getByRole('button',{name:'Toggle lesson navigation'}).click();
+ await expect(page.locator('#sidebar [aria-current=page]')).toBeFocused();
+ await page.keyboard.press('Escape');
+ await expect(page.locator('#sidebar')).not.toBeVisible();
+ await expect(page.getByRole('button',{name:'Toggle lesson navigation'})).toBeFocused();
+ await page.getByRole('button',{name:'Toggle lesson navigation'}).click();
+ await page.getByRole('button',{name:'Close course navigation'}).click();
+ await expect(page.locator('#sidebar')).not.toBeVisible();
+ await page.getByRole('button',{name:'Toggle lesson navigation'}).click();
+ await page.getByRole('heading',{level:1}).click();
+ await expect(page.locator('#sidebar')).not.toBeVisible();
+ await page.setViewportSize({width:820,height:1000});
+ const tablet=await page.locator('.experiment').boundingBox();expect(tablet.width).toBeGreaterThan(700);
+ await page.getByRole('button',{name:'Toggle lesson navigation'}).click();
+ await page.screenshot({path:'test-results/tablet-course-menu.png'});
+});

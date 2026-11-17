@@ -8,17 +8,18 @@
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./style.css">
 <link rel="stylesheet" href="./refinement.css">
+<link rel="stylesheet" href="./resources.css">
 <script type="module" src="./app.js"></script>
 </head>
 <body>
 <a class="skip" href="#content">Skip to lesson</a>
 <header class="topbar">
-  <button id="menu" class="icon-button" aria-label="Toggle lesson navigation" aria-expanded="false">☰</button>
+  <button id="menu" class="icon-button" aria-label="Toggle lesson navigation" aria-expanded="false" aria-controls="sidebar"><span aria-hidden="true">☰</span> Course</button>
   <a href="#" class="brand"><img src="./icon.svg" width="32" height="32" alt=""><span>Iceberg <strong>Lab</strong></span></a>
   <span class="top-caption">Understand the table. Explain the tradeoff.</span>
   <nav aria-label="Site"><a href="#guide">Your laboratory</a><a href="https://github.com/snowch/iceberg-lab">GitHub →</a><button id="theme" class="icon-button" aria-label="Switch color theme">◐</button></nav>
 </header>
-<aside class="sidebar" id="sidebar" aria-label="Lessons">
+<aside class="sidebar" id="sidebar" aria-label="Lessons"><div class="course-menu-head"><strong>Course contents</strong><button id="close-course" class="icon-button" aria-label="Close course navigation">×</button></div>
   <a class="overview-link" href="#">Course overview <span>→</span></a>
   <label class="search-label" for="search">Find a lesson</label>
   <input id="search" type="search" placeholder="Snapshots, pruning, access…">

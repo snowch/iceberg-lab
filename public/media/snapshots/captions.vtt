@@ -1,0 +1,34 @@
+WEBVTT
+
+00:00:00.500 --> 00:00:05.240
+A report needs a consistent table state while ingestion keeps adding orders.
+
+00:00:05.240 --> 00:00:08.530
+Iceberg records successive states as snapshots.
+
+00:00:08.530 --> 00:00:15.330
+A snapshot describes a complete state using file references; it is not merely a bag of newly inserted rows.
+
+00:00:16.830 --> 00:00:22.385
+In the default lesson fixture, the first batch creates snapshot one with forty rows.
+
+00:00:22.385 --> 00:00:26.670
+The second creates a state with eighty rows and names the first as its parent.
+
+00:00:26.670 --> 00:00:29.855
+The third state contains one hundred and twenty rows.
+
+00:00:29.855 --> 00:00:33.585
+Older immutable data files can be reused across these states.
+
+00:00:35.085 --> 00:00:39.880
+Reading an older snapshot selects its referenced inputs before the query runs.
+
+00:00:39.880 --> 00:00:44.085
+Keeping a snapshot identifier in a report is not enough on its own.
+
+00:00:44.085 --> 00:00:47.485
+Its metadata and data files must remain available.
+
+00:00:47.485 --> 00:00:53.570
+Run the lesson, follow the parent identifiers, then explain which state the current count describes.

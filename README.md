@@ -124,3 +124,20 @@ entry paths complement the full sequence. These additions remain optional so the
 responsive visual refinements. [Learning, UX and design review](docs/learning-ux-review.md) records the review
 criteria, available skill guidance, changes, verification and the distinction between implementation checks
 and evidence of learning effectiveness.
+
+## Concept diagrams, sources and narrated recaps
+
+Each lesson has a fixed concept diagram and an optional References row with a relevant official specification
+section, a reading question and an answer comparison. Diagrams are labelled illustrations; live experiment
+outputs remain separate. Three pilot recaps (snapshots, bounds and atomic publication) have native video
+controls, English captions, a visible transcript and a download fallback. MP4 and WebM are served locally,
+with synthetic narration identified. Videos do not autoplay or download before playback.
+
+The course uses a Course menu so code, diagrams and results can use more width while prose stays readable.
+Prerequisites and the code-free reading path are explicit on the overview, first lesson and laboratory guide.
+See [the visual-resources review](docs/visual-resources-review.md) for scope, source/version boundaries and QA.
+
+To regenerate the three original recordings, install FFmpeg with `libflite`, `libx264`, `libvpx-vp9` and
+`libopus`, plus the project's Chromium, then run `npm run media`. Production builds use committed assets
+under `public/media/`; no TTS or video tool is needed by learners or normal CI builds. Content is defined
+in `public/visuals.js` and `public/recaps.js`; `public/media-manifest.js` is generated.
