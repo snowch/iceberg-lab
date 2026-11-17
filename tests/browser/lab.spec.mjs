@@ -69,6 +69,13 @@ test('all lesson deep links render and the reading path works without WASM',asyn
     await expect(page.getByRole('heading',{level:1})).toHaveText(l.title);
     await expect(page.locator('#code')).toHaveValue(l.code);
   }
+  await page.locator('#code').focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button',{name:'Run experiment'})).toBeFocused();
+  await page.getByRole('link',{name:'Skip to lesson'}).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#content')).toBeFocused();
+  await expect(page.getByRole('heading',{level:1})).toHaveText(lessons.at(-1).title);
   await page.getByRole('button',{name:'Mark reviewed',exact:true}).click();
   await expect(page.locator('#progress-text')).toHaveText('1 of 42 reviewed');
   await page.goto('./#guide');

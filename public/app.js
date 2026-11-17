@@ -125,10 +125,6 @@ function renderLesson(l){
   $('code').oninput=()=>store.set('draft:'+l.id,$('code').value);
   $('code').onkeydown=event=>{
     if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();runLesson(l);}
-    if(event.key==='Tab'){
-      event.preventDefault();const t=event.target;const start=t.selectionStart,end=t.selectionEnd;
-      t.setRangeText('    ',start,end,'end');store.set('draft:'+l.id,t.value);
-    }
   };
   $('reset-code').onclick=()=>{$('code').value=l.code;store.set('draft:'+l.id,l.code);};
   $('run').onclick=()=>runLesson(l);
