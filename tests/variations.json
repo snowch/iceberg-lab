@@ -1,7 +1,7 @@
 [
   {
     "id": "catalog",
-    "instruction": "Add `append(0)` as the first line in the editor, then click Run experiment again. This adds 40 orders before the inspection. Which output values change?",
+    "instruction": "Add `append(0)` as the first line in the editor, then click Run experiment again. This adds 40 orders to the empty table. Compare `rows` and `data_files` with the original result. Both runs print a `metadata` address. The lab creates a fresh address on every run, even with the same code.",
     "code": "append(0)\nshow({'tables': ['.'.join(name) for name in catalog.list_tables('shop')]})\nshow({'metadata': table.metadata_location,\n      'rows': table.scan().count(),\n      'data_files': len(files())})",
     "check": "assert table.scan().count() == 40 and len(files()) == 1",
     "expectedError": null

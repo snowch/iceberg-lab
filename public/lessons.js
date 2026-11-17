@@ -25,7 +25,7 @@ show({'metadata': table.metadata_location,
 assert len(files()) == 0
 assert Path(table.metadata_location.replace('file://','')).exists()`,
 'The output lists shop.orders and a metadata file address, while rows and data_files are both 0. The table already has a name and column definitions, even though no order data has been written. The catalog records where that definition is stored.',
-'Add `append(0)` as the first line in the editor, then click Run experiment again. This adds 40 orders before the inspection. Which output values change?',
+'Add `append(0)` as the first line in the editor, then click Run experiment again. This adds 40 orders to the empty table. Compare `rows` and `data_files` with the original result. Both runs print a `metadata` address. The lab creates a fresh address on every run, even with the same code.',
 'What does the catalog resolve?', ['A table name to its metadata location','A row ID to a byte offset','A SQL query to its final answer'],0,{setup:'reset(batches=0)'}),
 lesson('membership',0,'A directory is not a table',
 'Distinguish files on disk from files belonging to the current table.',
