@@ -7,12 +7,15 @@ const escape = value => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&
 const formatCopy = value => escape(value).replace(/`([^`]+)`/g,'<code>$1</code>');
 const store = {
   get(key,fallback){try{return JSON.parse(localStorage.getItem('iceberg-v1:'+key)) ?? fallback;}catch{return fallback;}},
-  set(key,value){try{localStorage.setItem('iceberg-v1:'+key,JSON.stringify(value));}catch{/* Storage can be disabled; learning still works. */}}
+  set(key,value){try{localStorage.setItem('iceberg-v1:'+key,JSON.stringify(value));return true;}catch{return false;}}
 };
 let reviewed = store.get('reviewed',[]).filter(id=>lessons.some(l=>l.id===id));
-let worker, ready=false, busy=false, pending=null, current=null, activeRun=null, warehouseOwner=null;
-let runtimeText='The first run loads the lesson tools (about 46 MB of files). This can take a few moments.';
+let worker, ready=false, current=null, activeRequest=null, warehouseOwner=null;
+const initialRuntimeText='The first run loads the lesson tools (about 46 MB of files). This can take a few moments.';
+let runtimeText=initialRuntimeText;
 const results = new Map();
+const errors = new Map();
+const unsavedDrafts = new Map();
 const quizAnswers = new Map();
 const passRuns = new Set();
 document.querySelector('.skip').onclick=event=>{event.preventDefault();$('content').focus({preventScroll:true});window.scrollTo(0,0);};
@@ -82,7 +85,7 @@ function guide(){
   $('content').innerHTML=`<article class="guide"><div class="eyebrow">Reference / Your laboratory</div><h1>A real table.<br>Inside your tab.</h1>
   <p class="lead">The page downloads a Python WASM runtime on your first experiment. PyIceberg creates the table, Arrow writes the files, and DuckDB runs SQL locally.</p>
   <section><h2>Prerequisites and reading paths</h2><p>Start with familiarity with tables, rows and columns. To investigate by editing code, be able to read basic SQL SELECT, WHERE and GROUP BY statements and short Python examples with function calls, lists, dictionaries and loops. This is an Iceberg course, not a first course in SQL or Python.</p><p>You do not need Iceberg, Spark, Java, a cloud account or object-storage administration experience. Knowing what a Parquet file is will help; understanding its binary format is optional. The Parquet lab is a companion, not a required prerequisite.</p><p>For a reading path, use the concept diagrams and worked explanations, then explain each mechanism in your own words. Optional captioned videos and transcripts cover selected processes. Experiment checks provide evidence about the code; they do not certify mastery merely for pressing Run.</p></section>
-  <section><h2>How a lesson works</h2><p>Each lesson asks one question. Predict the outcome, run the editable Python, inspect its output and the warehouse, then compare it with the worked result. Try the suggested variation and answer the explanation check.</p><p>Use Your notes if you want to save a prediction and explanation. They are saved only in this browser. Each example states what the page prepares automatically, what to run and which output values to inspect. Each section ends with an unfamiliar scenario and a self-review rubric; try answering it without looking back, then use the checklist to review your reasoning.</p><p>Every run recreates that lesson’s starting table or model. It does not continue the previous run or previous lesson. Your code edits and review progress are saved in this browser when storage is available. The warehouse itself is held in worker memory and is lost on reload, stopping the runtime, or starting another experiment.</p><p>Use <strong>Mark reviewed</strong> to track a reading path. It is a personal bookmark, not a certificate. Passing the original code check and the explanation question also marks the lesson reviewed. Edited examples can produce valid results that differ from the original checks. They are labelled as edited runs rather than graded as failures.</p></section>
+  <section><h2>How a lesson works</h2><p>Each lesson asks one question. Predict the outcome, run the editable Python, inspect its output and the warehouse, then compare it with the worked result. Try the suggested variation and answer the explanation check.</p><p>Use Your notes if you want to save a prediction and explanation. They are saved only in this browser. Each example states what the page prepares automatically, what to run and which output values to inspect. Each section ends with an unfamiliar scenario and a self-review rubric; try answering it without looking back, then use the checklist to review your reasoning.</p><p>Every run recreates that lesson’s starting table or model. It does not continue the previous run or previous lesson. Your code edits and review progress are saved in this browser when storage is available. The warehouse itself is held in worker memory and is lost on reload, stopping the runtime, or starting another experiment.</p><p>Use <strong>Mark reviewed</strong> to track a reading path. It is a personal bookmark, not a certificate. Pass the original example check and answer the explanation question to mark the lesson reviewed automatically. Edited examples can produce valid results that differ from the original checks. They are labelled as edited runs rather than graded as failures.</p></section>
   <section><h2>What actually runs</h2><table><thead><tr><th>Layer</th><th>Pinned implementation</th></tr></thead><tbody>
   <tr><td>Interpreter</td><td>Pyodide 314.0.3, in a Web Worker</td></tr><tr><td>Table library</td><td>PyIceberg 0.11.1 · format v2 examples</td></tr><tr><td>Catalog</td><td>PyIceberg SqlCatalog on local SQLite</td></tr><tr><td>Files</td><td>Real metadata JSON, Avro manifests and Parquet</td></tr><tr><td>Data / SQL</td><td>PyArrow 22.0.0 / DuckDB 1.5.1</td></tr><tr><td>Data</td><td>120 invented orders in the usual starting table; no personal data</td></tr></tbody></table>
   <p>Self-hosted runtime assets cost roughly 46 MB uncompressed on first load. Browser caching and compression affect actual transfer. Startup may take tens of seconds. Nothing is downloaded for computation until you select Run. Static lesson assets load normally.</p>
@@ -107,14 +110,16 @@ function guide(){
   <tr><td>Optimistic concurrency</td><td>Preparing a change, then validating its requirements against current state at commit time.</td></tr>
   </tbody></table></section>
   <section><h2>Inspect and export</h2><p>After a run, open Code, files and checks and select a file under Files on disk to read its JSON, Avro or Parquet metadata. Export warehouse downloads a ZIP containing the catalog and files, including retained historical data. It exports the most recent experiment in this worker. It does not persist that warehouse into the next lesson.</p><p>Metadata contains absolute <code>file:///warehouse/...</code> paths. To reopen an export, extract at <code>/warehouse</code> in an isolated environment and use a compatible PyIceberg SqlCatalog with <code>sqlite:////warehouse/catalog.db</code>. Moving it elsewhere requires a deliberate path relocation; an arbitrary unzip location is not portable. The exported SQLite catalog is an instructional local catalog, not a REST catalog.</p><p>Export evidence separately to save your code, starting setup, check result and table state. No cloud upload is performed.</p></section>
-  <section><h2>If something fails</h2><p>Use Stop to interrupt a running example, then click Run experiment to start again. Use Reset runtime under Code, files and checks if you need to discard the current Python state. This discards its in-memory warehouse. Reset code restores the original example. If the runtime cannot load, check access to this site’s static assets and available browser memory. Read the worked explanation while it loads; try a current desktop Chrome, Firefox or Safari.</p></section>
+  <section><h2>If something fails</h2><p>Use Stop to interrupt a running example, then click Run experiment to start again. Use Reset runtime under Code, files and checks if you need to discard the current Python state. This discards its in-memory warehouse. Reset code brings back the original example. Use Recover saved edit to return to your previous code. If the runtime cannot load, check access to this site’s static assets and available browser memory. Read the worked explanation while it loads; try a current desktop Chrome, Firefox or Safari.</p></section>
   <section><h2>Sources and further reading</h2><ul><li><a href="https://iceberg.apache.org/spec/">Apache Iceberg table specification</a></li><li><a href="https://py.iceberg.apache.org/">PyIceberg documentation</a></li><li><a href="https://pyodide.org/en/314.0.3/">Pyodide runtime documentation</a></li><li><a href="https://github.com/iancmoritz/apacheprojects/tree/main/iceberg">Apache projects in the browser: Iceberg runtime investigation</a> — source of the adapted compatibility shims and runtime packaging script.</li><li><a href="https://snowch.github.io/labs/">Chris Snow’s labs</a> — focused investigations, worked explanations and evidence-led learning.</li></ul></section>
   <div class="actions"><a class="button primary" href="#lesson/catalog">Start investigating →</a><a class="button" href="#">Course overview</a></div></article>`;
 }
 function renderLesson(l){
   store.set('last',l.id);
   const idx=lessons.indexOf(l),prev=lessons[idx-1],next=lessons[idx+1];
-  const saved=store.get('draft:'+l.id,l.code);
+  const draftKey='draft:'+l.id;
+  const storedDraft=unsavedDrafts.get(l.id)??store.get(draftKey,l.code);
+  let draft=typeof storedDraft==='string'?{code:storedDraft}:storedDraft;
   const choices=l.choices.map((text,i)=>({text,index:i}));
   // Rotate positions so the explanation check never teaches a fixed answer position.
   for(let n=0;n<idx%choices.length;n++)choices.push(choices.shift());
@@ -127,10 +132,11 @@ function renderLesson(l){
   <section class="experiment" id="experiment" aria-label="Editable experiment"><h2>Run the example</h2>
   <p class="prepared-state">${formatCopy(support[l.id].prepared)}</p><p class="run-instructions">${formatCopy(support[l.id].action)}</p>
   <div id="runtime-status" class="runtime-status" role="status"><span></span></div>
-  <div class="editor-shell"><div class="editor-bar"><span>Python example · you can edit this</span><button id="reset-code">Reset code</button></div><label class="sr-only" for="code">Editable Python example</label><textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Editable Python experiment">${escape(saved)}</textarea></div>
+  <div class="editor-shell"><div class="editor-bar"><span>Python example · you can edit this</span><div class="draft-actions"><button id="reset-code" hidden>Reset code</button><button id="recover-code" hidden>Recover saved edit</button></div></div><label class="sr-only" for="code">Editable Python example</label><textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Editable Python experiment"></textarea></div>
+  <p id="draft-status" class="sr-only" role="status"></p>
   <div class="run-bar"><button id="run" class="button primary">Run experiment <span>→</span></button><button id="stop" class="button subtle" hidden>Stop</button></div>
-  <div id="result" aria-live="polite"></div>
-  <details class="technical-details" id="technical-details"><summary>Code, files and checks (optional)</summary><h3>How this example works</h3><p>${formatCopy(support[l.id].explanation)}</p><h3>Automatic preparation</h3><p>The page runs the following command before the code in the editor. You do not need to type or run it yourself. Every run recreates this starting state.</p><pre>${escape(l.setup)}</pre><h3>Check for the original example</h3><p>These checks describe the unchanged example. Editing the code can produce a valid result that differs from them.</p><pre>${escape(l.check)}</pre><div id="technical-result"><p>Run the example to inspect its files.</p></div><div class="advanced-actions"><button id="export" class="button" disabled>Export warehouse ↓</button><button id="reset-runtime" class="button subtle">Reset runtime</button></div><p class="technical-note">Export warehouse downloads the table files. Reset runtime discards the current table; Run experiment will reload the tools. Your saved code and notes are kept. <a href="./python/lab.py">Read the preparation and helper code</a> or <a href="#guide">open the laboratory guide</a>.</p></details>
+  <div id="result"><div id="run-error" aria-live="polite"></div><div id="run-output" aria-live="polite"></div></div>
+  <details class="technical-details" id="technical-details"><summary>Code, files and checks (optional)</summary><h3>How this example works</h3><p>${formatCopy(support[l.id].explanation)}</p><h3>Automatic preparation</h3><p>The page runs the following command before the code in the editor. You do not need to type or run it yourself. Every run recreates this starting state.</p><pre>${escape(l.setup)}</pre><h3>Check for the original example</h3><p>These checks describe the unchanged example. Editing the code can produce a valid result that differs from them.</p><pre>${escape(l.check)}</pre><div id="technical-error"></div><div id="technical-result"></div><div class="advanced-actions"><button id="export" class="button" disabled>Export warehouse ↓</button><button id="reset-runtime" class="button subtle">Reset runtime</button></div><p class="technical-note">Export warehouse downloads the table files. Reset runtime discards the current table; Run experiment will reload the tools. Your saved code and notes are kept. <a href="./python/lab.py">Read the preparation and helper code</a> or <a href="#guide">open the laboratory guide</a>.</p></details>
   </section>
   <section class="worked" id="worked"><h2>What the result means</h2><p class="original-result-label">With the original code:</p><p>${escape(l.worked)}</p></section>
   ${diagram(l.id)}
@@ -143,16 +149,42 @@ function renderLesson(l){
   for(const [element,key] of [['prediction-note','prediction'],['reflection-note','reflection']]){
     $(element).oninput=()=>store.set(key+':'+l.id,$(element).value);
   }
-  $('code').style.height=Math.min(600,Math.max(190,saved.split('\n').length*22+30))+'px';
-  $('code').oninput=()=>store.set('draft:'+l.id,$('code').value);
-  $('code').onkeydown=event=>{
+  const editor=$('code');
+  editor.value=draft.code;
+  editor.style.height=Math.min(600,Math.max(190,draft.code.split('\n').length*22+30))+'px';
+  function updateDraftControls(){
+    $('reset-code').hidden=editor.value===l.code;
+    $('recover-code').hidden=draft.previous===undefined||draft.previous===editor.value;
+  }
+  function saveDraft(code,previous){
+    draft={code,previous};
+    const saved=store.set(draftKey,draft);
+    if(saved)unsavedDrafts.delete(l.id);
+    else unsavedDrafts.set(l.id,draft);
+    updateDraftControls();
+    return saved;
+  }
+  function switchDraft(code,message){
+    const previous=editor.value===l.code?undefined:editor.value;
+    editor.value=code;
+    const saved=saveDraft(code,previous);
+    $('draft-status').textContent=message+(saved?'':' Browser storage is unavailable. Your edits are available in this tab.');
+    editor.focus();
+  }
+  updateDraftControls();
+  editor.oninput=()=>saveDraft(editor.value,draft.previous);
+  editor.onkeydown=event=>{
     if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();runLesson(l);}
   };
-  $('reset-code').onclick=()=>{$('code').value=l.code;store.set('draft:'+l.id,l.code);};
+  $('reset-code').onclick=()=>switchDraft(l.code,'Original code restored. Use Recover saved edit to return to your edit.');
+  $('recover-code').onclick=()=>switchDraft(draft.previous,'Saved edit restored.');
   $('run').onclick=()=>runLesson(l);
   $('stop').onclick=stopWorker;
   $('reset-runtime').onclick=stopWorker;
-  $('export').onclick=()=>{if(!busy&&warehouseOwner===l.id){setBusy(true);worker.postMessage({type:'export'});}};
+  $('export').onclick=()=>{
+    if(activeRequest||warehouseOwner!==l.id)return;
+    requestFiles({type:'export',lesson:l.id},'Preparing the warehouse download…');
+  };
   $('quiz').onsubmit=event=>{
     event.preventDefault();const picked=new FormData(event.currentTarget).get('answer');
     const ok=Number(picked)===l.answer;quizAnswers.set(l.id,ok);
@@ -165,8 +197,7 @@ function renderLesson(l){
     store.set('reviewed',reviewed);renderNav();updateReview();
   };
   document.querySelectorAll('.recap').forEach(resource=>resource.addEventListener('toggle',()=>{if(!resource.open)resource.querySelector('video')?.pause();}));
-  updateRuntime();updateReview();
-  if(results.has(l.id)&&!(busy&&activeRun?.id===l.id))renderResult(results.get(l.id));
+  renderExperiment(l.id);updateReview();
 }
 function updateReview(){
   if(!$('review'))return;
@@ -180,96 +211,148 @@ function markReviewed(id){
 }
 function updateRuntime(){
   if(!$('runtime-status'))return;
+  const busy=activeRequest!==null;
+  const differentLesson=busy&&activeRequest.lesson!==current.id;
   $('runtime-status').classList.toggle('busy',busy);
-  $('runtime-status').querySelector('span').textContent=runtimeText;
+  $('runtime-status').querySelector('span').textContent=differentLesson?'The lesson tools are busy in another lesson.':runtimeText;
   $('runtime-status').hidden=!busy&&ready;
   $('run').disabled=busy;
   $('run').innerHTML=busy?'Working…':'Run experiment <span>→</span>';
   $('stop').hidden=!busy;
-  $('export').disabled=busy||!ready||warehouseOwner!==current?.id;
-  document.querySelectorAll('[data-file]').forEach(button=>button.disabled=busy||warehouseOwner!==current?.id);
+  $('export').disabled=busy||!ready||warehouseOwner!==current.id;
+  document.querySelectorAll('[data-file]').forEach(button=>button.disabled=busy||warehouseOwner!==current.id);
 }
-function setBusy(value){busy=value;updateRuntime();}
 function startWorker(){
-  worker=new Worker(new URL('./worker.js',import.meta.url),{type:'module'});
-  worker.onmessage=({data})=>{
-    if(data.type==='status'){runtimeText=data.text;updateRuntime();}
+  const instance=new Worker(new URL('./worker.js',import.meta.url),{type:'module'});
+  worker=instance;
+  instance.onmessage=({data})=>{
+    if(worker!==instance||!activeRequest)return;
+    const request=activeRequest;
+    if(data.type==='status'){runtimeText=data.text;updateRuntime();return;}
     if(data.type==='ready'){
       ready=true;
-      if(pending){const request=pending;pending=null;worker.postMessage(request);runtimeText='Preparing the table and running the example…';updateRuntime();}
-      else setBusy(false);
-    }
-    if(data.type==='result'){
-      const id=activeRun.id;
-      data.source=activeRun.code;data.setup=activeRun.setup;data.lesson=id;
-      results.set(id,data);warehouseOwner=id;
-      if(data.passed){passRuns.add(id);if(quizAnswers.get(id))markReviewed(id);}else passRuns.delete(id);
-      runtimeText='The example has finished.';setBusy(false);
-      if(current?.id===id)renderResult(data);
-    }
-    if(data.type==='archive'){
-      download(data.bytes,'iceberg-warehouse.zip','application/zip');setBusy(false);
-    }
-    if(data.type==='inspection'){
-      if($('inspector'))$('inspector').textContent=JSON.stringify(data.value,null,2);
-      setBusy(false);
+      runtimeText='Preparing the table and running the example…';
+      updateRuntime();
+      instance.postMessage(request);
+      return;
     }
     if(data.type==='error'){
-      runtimeText='The code stopped. Check the error below, or use Reset code and run again.';
-      pending=null;setBusy(false);
-      showRunError(data.text);
+      failRequest(data.text,!ready?'The lesson tools could not load':null);
+      return;
     }
+    activeRequest=null;
+    if(data.type==='result'){
+      const {lesson,code,setup,edited}=request;
+      const result={...data,source:code,setup,lesson};
+      results.set(lesson,result);warehouseOwner=lesson;
+      if(data.passed&&!edited){
+        passRuns.add(lesson);
+        if(quizAnswers.get(lesson))markReviewed(lesson);
+      }
+      if(current?.id===lesson){renderExperiment(lesson);return;}
+    }
+    if(data.type==='archive')download(data.bytes,'iceberg-warehouse.zip','application/zip');
+    if(data.type==='inspection'&&current?.id===request.lesson&&$('inspector')){
+      $('inspector').textContent=JSON.stringify(data.value,null,2);
+    }
+    updateRuntime();
   };
-  worker.onerror=event=>{
-    runtimeText='The lesson tools could not load. Click Run experiment to try again.';pending=null;setBusy(false);
-    showRunError(event.message||'The lesson tools could not load. Try running the example again.');
+  instance.onerror=event=>{
+    if(worker!==instance)return;
+    const title=ready?'The lesson tools stopped':'The lesson tools could not load';
+    clearWorker();
+    failRequest(event.message||title,title);
   };
-  worker.postMessage({type:'boot'});
+  instance.postMessage({type:'boot'});
+}
+function clearWorker(){
+  worker?.terminate();worker=null;ready=false;warehouseOwner=null;
 }
 function stopWorker(){
-  worker?.terminate();worker=null;ready=false;pending=null;activeRun=null;warehouseOwner=null;
-  runtimeText='Stopped. Click Run experiment to reload the tools and recreate the example table.';setBusy(false);
-  if($('inspector'))$('inspector').textContent='Runtime stopped; run this lesson again to inspect its files.';
+  clearWorker();activeRequest=null;
+  runtimeText='Stopped. Click Run experiment to reload the tools and recreate the example table.';
+  if(current)renderExperiment(current.id);
+}
+function failRequest(text,runtimeFailure){
+  const request=activeRequest;
+  activeRequest=null;
+  runtimeText=initialRuntimeText;
+  if(!request){
+    if(current)renderExperiment(current.id);
+    return;
+  }
+  if(request.type==='run'){
+    const title=runtimeFailure||(request.edited?'The edited example stopped':'The original example stopped');
+    errors.set(request.lesson,{title,text,runtimeFailure});
+  }
+  if(current?.id===request.lesson){
+    if(request.type==='run'||runtimeFailure)renderExperiment(request.lesson);
+    if(request.type!=='run'){
+      const isInspection=request.type==='inspect';
+      if(isInspection&&$('inspector'))$('inspector').textContent='Select a file to try again.';
+      $('technical-error').innerHTML=`<h3>${isInspection?'Could not inspect the file':'Could not export the warehouse'}</h3><pre>${escape(text)}</pre>`;
+    }
+  }
+  updateRuntime();
 }
 function runLesson(l){
-  if(busy)return;
-  if(worker&&!ready){worker.terminate();worker=null;}
-  $('result').replaceChildren();
-  $('technical-result').innerHTML='<p>Run in progress.</p>';
-  passRuns.delete(l.id);
-  activeRun={type:'run',id:l.id,setup:l.setup,code:$('code').value,check:l.check};
-  store.set('draft:'+l.id,activeRun.code);
-  // Another run destroys the previous warehouse, even if the new code raises.
-  warehouseOwner=null;setBusy(true);
+  if(activeRequest)return;
+  if(worker&&!ready)clearWorker();
+  const code=$('code').value;
+  const edited=code.trim()!==l.code.trim();
+  activeRequest={type:'run',lesson:l.id,setup:l.setup,code,check:l.check,edited};
+  errors.delete(l.id);
+  if(!edited)passRuns.delete(l.id);
+  // Starting another run replaces the previous warehouse even if the code stops.
+  warehouseOwner=null;
   runtimeText=ready?'Preparing the table and running the example…':'Loading the lesson tools. The first run may take tens of seconds…';
+  renderExperiment(l.id);
+  if(worker)worker.postMessage(activeRequest);
+  else startWorker();
+}
+function requestFiles(request,status){
+  activeRequest=request;
+  runtimeText=status;
+  $('technical-error').replaceChildren();
   updateRuntime();
-  if(!worker){pending=activeRun;startWorker();}
-  else if(!ready){pending=activeRun;worker.postMessage({type:'boot'});}
-  else worker.postMessage(activeRun);
+  worker.postMessage(request);
 }
 function download(data,name,type){
   const url=URL.createObjectURL(new Blob([data],{type}));const link=document.createElement('a');
   link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
-function showRunError(message){
-  if(!$('result'))return;
-  const lines=String(message).trim().split('\n').filter(Boolean);
-  $('result').innerHTML=`<div class="output error"><div class="output-title">The code stopped</div><pre>${escape(lines.at(-1)||message)}</pre></div><p>Check the line you edited, or click Reset code to restore the original example. Then click Run experiment again.</p>`;
-  if($('technical-result'))$('technical-result').innerHTML=`<h3>Full error message</h3><pre>${escape(message)}</pre>`;
+function renderExperiment(id){
+  const failure=errors.get(id);
+  const output=results.get(id);
+  $('run-error').replaceChildren();
+  $('technical-error').replaceChildren();
+  if(failure){
+    const {title,text,runtimeFailure}=failure;
+    const lines=text.trim().split('\n').filter(Boolean);
+    const guidance=runtimeFailure?'Click Run experiment to retry.':'Check the error, then click Run experiment to try again.';
+    $('run-error').innerHTML=`<div class="output error"><div class="output-title">${title}</div><pre>${escape(lines.at(-1)||text)}</pre></div><p class="feedback">${guidance}</p>`;
+    $('technical-error').innerHTML=`<h3>Full error message</h3><pre>${escape(text)}</pre>`;
+  }
+  if(output)renderResult(output);
+  else $('technical-result').innerHTML=activeRequest?.type==='run'&&activeRequest.lesson===id?'<p>Run in progress.</p>':'<p>Run the example to inspect its files.</p>';
+  updateRuntime();
 }
 function renderResult(result){
   const e=result.evidence, lesson=lessons.find(l=>l.id===result.lesson);
   const edited=result.source.trim()!==lesson.code.trim();
-  const feedback=edited?'Your edited example finished. The explanation below describes the original code.':!result.passed?'The original example finished, but its check did not pass. Open Code, files and checks to inspect the check.':'';
-  $('result').innerHTML=`<div class="output"><div class="output-title">Your result</div><pre>${escape(result.output||'The code finished without printing a result. Add show(...) to print a value you want to inspect.')}</pre></div>${feedback?`<p class="feedback ${!result.passed&&!edited?'error':''}">${feedback}</p>`:''}`;
-  $('technical-result').innerHTML=`<p class="original-check-status">Original example checks: ${result.passed?'passed':'different result'}. ${edited?'You edited the example.':''}</p><h3>Table after this run</h3><p>${e.rows} rows · ${e.live_files} current data files · ${e.snapshots} retained snapshots</p><h3>Snapshot history and metadata address</h3><pre>${escape(JSON.stringify({metadata:e.metadata,spec_id:e.spec_id,history:e.history},null,2))}</pre><h3>Files on disk</h3><p>This includes files needed by older snapshots. Select a file to inspect it. The file list is available until the next run or runtime reset.</p><div class="file-list">${e.warehouse.map((f,i)=>`<button data-file="${i}" ${warehouseOwner===current.id?'':'disabled'}>${escape(f.path)} <span>(${f.bytes.toLocaleString()} B)</span></button>`).join('')}</div><pre id="inspector" class="inspector">Select a file above.</pre><button class="button subtle" id="export-evidence">Export evidence ↓</button>`;
+  const feedback=edited?'Your edited example finished. The explanation below describes the original code.':!result.passed?'The original example finished, but its check found a different result. Open Code, files and checks to see the check.':'';
+  const title=`Last completed result (${edited?'edited code':'original code'})`;
+  $('run-output').innerHTML=`<div class="output"><div class="output-title">${title}</div><pre>${escape(result.output||'The code finished without printing a result. Add show(...) to print a value you want to inspect.')}</pre></div>${feedback?`<p class="feedback ${!result.passed&&!edited?'error':''}">${feedback}</p>`:''}`;
+  const check=edited?'The check above describes the original code. This result came from edited code.':result.feedback;
+  const available=warehouseOwner===result.lesson;
+  const files=available?'Select a file to inspect it. This includes files needed by older snapshots.':'These paths came from the last completed run. Run this lesson again to inspect its files.';
+  $('technical-result').innerHTML=`<p class="original-check-status">${escape(check)}</p><h3>Table after the last completed run</h3><p>${e.rows} rows · ${e.live_files} current data files · ${e.snapshots} retained snapshots</p><h3>Snapshot history and metadata address</h3><pre>${escape(JSON.stringify({metadata:e.metadata,spec_id:e.spec_id,history:e.history},null,2))}</pre><h3>Files on disk</h3><p>${files}</p><div class="file-list">${e.warehouse.map((f,i)=>`<button data-file="${i}" ${available?'':'disabled'}>${escape(f.path)} <span>(${f.bytes.toLocaleString()} B)</span></button>`).join('')}</div><pre id="inspector" class="inspector" ${available?'':'hidden'}>Select a file above.</pre><button class="button subtle" id="export-evidence">Export evidence ↓</button>`;
   $('export-evidence').onclick=()=>download(JSON.stringify({...result,prediction:store.get('prediction:'+result.lesson,''),reflection:store.get('reflection:'+result.lesson,''),exported_at:new Date().toISOString(),runtime:'Pyodide 314.0.3 / PyIceberg 0.11.1'},null,2),`iceberg-${result.lesson}-evidence.json`,'application/json');
   document.querySelectorAll('[data-file]').forEach(button=>button.onclick=()=>{
-    if(busy||warehouseOwner!==current.id)return;
-    $('inspector').textContent='Reading the selected file…';setBusy(true);
-    worker.postMessage({type:'inspect',path:e.warehouse[Number(button.dataset.file)].path});
+    if(activeRequest||warehouseOwner!==result.lesson)return;
+    $('inspector').textContent='Reading the selected file…';
+    requestFiles({type:'inspect',lesson:result.lesson,path:e.warehouse[Number(button.dataset.file)].path},'Reading the selected file…');
   });
-  updateRuntime();
 }
 function route(){
   const id=location.hash.replace('#lesson/','');

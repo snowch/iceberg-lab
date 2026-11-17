@@ -45,6 +45,95 @@ test('real WASM experiment, meaningful check, inspection, export and recovery',a
   expect(requests.filter(url=>!url.startsWith('http://127.0.0.1:4173/'))).toEqual([]);
 });
 
+test('catalog counts, saved edits and run feedback stay with the lesson',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto('./#lesson/catalog');
+  const editor=page.locator('#code');
+  const original=await editor.inputValue();
+  const variation='append(0)\n'+original;
+  await page.evaluate(code=>{
+    localStorage.setItem('iceberg-v1:draft:catalog',JSON.stringify(code));
+    localStorage.setItem('iceberg-v1:prediction:catalog',JSON.stringify('An empty table can have metadata.'));
+  },variation);
+  await page.reload();
+  await expect(editor).toHaveValue(variation);
+  await page.getByRole('button',{name:'Reset code'}).click();
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue(original);
+  await page.reload();
+  const recover=page.getByRole('button',{name:'Recover saved edit'});
+  await expect(recover).toBeVisible();
+  await expect(editor).toHaveValue(original);
+  await recover.focus();
+  await page.keyboard.press('Enter');
+  await expect(editor).toHaveValue(variation);
+  await expect(editor).toBeFocused();
+  await page.locator('.lesson-notes>summary').click();
+  await expect(page.locator('#prediction-note')).toHaveValue('An empty table can have metadata.');
+  await page.locator('.lesson-notes>summary').click();
+  await page.getByRole('button',{name:'Reset code'}).click();
+  await page.keyboard.press('Tab');
+  const run=page.locator('#run');
+  await expect(run).toBeFocused();
+
+  await expect(page.locator('.change-box code')).toHaveText(['append(0)','rows','data_files','metadata']);
+  await expect(page.locator('.change-box')).toContainText('fresh address on every run');
+  const output=page.locator('#run-output pre');
+  async function runExperiment(){
+    await run.click();
+    await expect(run).toBeEnabled({timeout:120000});
+    return output.innerText();
+  }
+  const first=await runExperiment();
+  const second=await runExperiment();
+  for(const result of [first,second]){
+    expect(result).toMatch(/"rows":\s*0/);
+    expect(result).toMatch(/"data_files":\s*0/);
+    expect(result).toMatch(/"metadata":\s*"[^"]+\.metadata\.json"/);
+  }
+  const address=result=>result.match(/"metadata":\s*"([^"]+)"/)[1];
+  expect(address(first)).not.toBe(address(second));
+  await recover.click();
+  const edited=await runExperiment();
+  expect(edited).toMatch(/"rows":\s*40/);
+  expect(edited).toMatch(/"data_files":\s*1/);
+  expect(edited).toMatch(/"metadata":\s*"[^"]+\.metadata\.json"/);
+  await expect(page.locator('#run-output .output-title')).toContainText('edited code');
+  await page.getByLabel('A table name to its metadata location').check();
+  await page.getByRole('button',{name:'Check explanation'}).click();
+  await expect(page.locator('#quiz-feedback')).toContainText('Correct.');
+  await expect(page.locator('#review')).toContainText('Reviewed');
+
+  await editor.fill('import time\ntime.sleep(2)\nraise ValueError("Catalog failure")');
+  await run.click();
+  await expect(output).toHaveText(edited);
+  await page.getByRole('button',{name:'Reset code'}).click();
+  await page.evaluate(()=>{location.hash='#lesson/membership';});
+  await expect(page.getByRole('heading',{level:1})).toHaveText('A directory is not a table');
+  await expect(page.locator('#runtime-status')).toContainText('another lesson');
+  await expect(run).toBeEnabled();
+  await expect(page.locator('#run-error')).toBeEmpty();
+  await expect(page.locator('#run-output')).toBeEmpty();
+  await page.goto('./#lesson/catalog');
+  await expect(page.locator('#run-error')).toContainText('The edited example stopped');
+  await expect(page.locator('#run-error')).toContainText('Catalog failure');
+  await expect(output).toHaveText(edited);
+  await expect(page.locator('#run-output .output-title')).toHaveText('Last completed result (edited code)');
+  await page.locator('#technical-details>summary').click();
+  await expect(page.locator('#technical-error')).toContainText('Catalog failure');
+  await expect(page.locator('#technical-result')).toContainText('Run this lesson again to inspect its files.');
+  await expect(page.getByRole('button',{name:'Export warehouse'})).toBeDisabled();
+  await page.getByRole('button',{name:'Switch color theme'}).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:'test-results/catalog-recovery-dark-mobile.png'});
+
+  await expect(editor).toHaveValue(original);
+  expect(await runExperiment()).toMatch(/"rows":\s*0/);
+  await expect(page.locator('#run-error')).toBeEmpty();
+  await expect(page.locator('#run-output .output-title')).toContainText('original code');
+});
+
 test('mobile navigation, theme and focused lesson search',async({page})=>{
   await page.setViewportSize({width:390,height:844});
   await page.goto('./');
