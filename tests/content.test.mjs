@@ -28,3 +28,15 @@ test('Models identify their boundary',()=>{
   assert.ok(models.length>=8);
   for(const l of models)assert.match(l.code+l.worked,/model|illustrative|scenario/i,l.id);
 });
+
+test('every lesson has actionable learning scaffolds and sections test transfer',async()=>{
+  const {support,sectionReviews,paths}=await import('../public/learning.js');
+  assert.equal(Object.keys(support).length,lessons.length);
+  assert.equal(sectionReviews.length,parts.length);
+  for(const l of lessons){
+    for(const key of ['concept','hint','notice'])assert.ok(support[l.id][key].length>35,`${l.id}: ${key}`);
+    assert.notEqual(support[l.id].hint,support[l.id].notice);
+  }
+  for(const [,scenario,rubric] of sectionReviews){assert.ok(scenario.length>70);assert.equal(rubric.length,3);}
+  for(const path of paths)assert.ok(lessons.some(l=>l.id===path.start));
+});

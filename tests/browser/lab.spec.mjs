@@ -81,3 +81,30 @@ test('all lesson deep links render and the reading path works without WASM',asyn
   await page.goto('./#guide');
   await expect(page.getByRole('heading',{name:'Runtime boundaries'})).toBeVisible();
 });
+
+test('learning notes, progressive hints, actionable feedback and section transfer',async({page})=>{
+  await page.goto('./#lesson/bounds');
+  await expect(page.locator('.concept')).toContainText('exclusion evidence');
+  await page.getByLabel('Your prediction and why').fill('One file, because the batch ID ranges are disjoint.');
+  await page.getByLabel('Explain it in your own words').fill('A kept file is only a candidate.');
+  await page.getByText('Need a starting point?',{exact:true}).click();
+  await expect(page.locator('.learning-hint')).toContainText('1005');
+  await expect(page.locator('.learning-hint details')).not.toHaveAttribute('open','');
+  await page.getByText('What evidence should I look for?',{exact:true}).click();
+  await expect(page.locator('.learning-hint details')).toHaveAttribute('open','');
+  await page.getByLabel('Every value inside the range exists').check();
+  await page.getByRole('button',{name:'Check explanation'}).click();
+  await expect(page.locator('#quiz-feedback')).toContainText('Separate selected files');
+  await page.reload();
+  await expect(page.locator('#prediction-note')).toHaveValue('One file, because the batch ID ranges are disjoint.');
+  await expect(page.locator('#reflection-note')).toHaveValue('A kept file is only a candidate.');
+  await page.goto('./#lesson/catalog');
+  await expect(page.locator('#prediction-note')).toHaveValue('');
+  await page.goto('./#lesson/hidden-transforms');
+  await expect(page.locator('.transfer')).toContainText('old queries remain expensive');
+  await page.getByText('Review your explanation',{exact:true}).click();
+  await expect(page.locator('.transfer li')).toHaveCount(3);
+  await page.getByRole('link',{name:'03 Explain',exact:true}).click();
+  await expect(page.locator('#worked')).toHaveAttribute('open','');
+  await expect(page).toHaveURL(/#lesson\/hidden-transforms$/);
+});

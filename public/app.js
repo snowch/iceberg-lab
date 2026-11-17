@@ -1,4 +1,5 @@
 import {parts,lessons} from './lessons.js';
+import {support,sectionReviews,paths} from './learning.js';
 const $ = id => document.getElementById(id);
 const escape = value => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store = {
@@ -51,26 +52,28 @@ function home(){
   const last=store.get('last',null);
   const resume=lessons.find(l=>l.id===last);
   $('content').innerHTML=`
-    <section class="hero"><div class="eyebrow">The browser field guide <span> / Apache Iceberg</span></div>
+    <section class="hero"><div class="hero-copy"><div class="eyebrow">The browser field guide <span> / Apache Iceberg</span></div>
     <h1>Understand the table.<br><em>See what changes.</em></h1>
     <p class="lead">Follow the files. Read less data. Change a table safely. Learn Iceberg through small experiments with real tables, running entirely in your browser.</p>
     <div class="actions"><a class="button primary" href="#lesson/${resume?.id||'catalog'}">${resume?'Continue learning':'Start the first lesson'} <span>→</span></a><a class="button" href="#guide">Explore your laboratory</a></div>
     <div class="facts"><span><i class="dot"></i>42 focused lessons</span><span><i class="dot"></i>About 5 minutes each</span><span><i class="dot"></i>No setup or account</span><span><i class="dot"></i>Local WASM execution</span></div>
+    </div><div class="hero-art" role="img" aria-label="An iceberg above and below the water, illustrating the table structure beneath a simple query."><span class="art-overline">A SIMPLE QUERY. A DEEPER STRUCTURE.</span><svg viewBox="0 0 360 300" aria-hidden="true"><defs><linearGradient id="ice" x2="0" y2="1"><stop stop-color="#f4ffff"/><stop offset="1" stop-color="#94c8ce"/></linearGradient></defs><path d="M25 152 Q100 135 180 153 T340 150" fill="none" stroke="#81b9c1" opacity=".6"/><path d="m75 146 88-115 42 69 35-39 49 87Z" fill="url(#ice)"/><path d="m163 31 4 115h-92Z" fill="#d4eded"/><path d="m205 100-38 46h122l-49-85Z" fill="#a1c7d0"/><path d="m67 165 62 95 49-28 47 47 73-115Z" fill="#76bcc8" opacity=".25"/><path d="m67 165 111 67-49 28Z" fill="#92dae1" opacity=".3"/><path d="m178 232 47 47 20-114Z" fill="#9dd9df" opacity=".2"/><path d="M28 158h304" stroke="#b2e5e6" opacity=".7" stroke-dasharray="4 5"/><circle cx="167" cy="109" r="4" fill="#fff"/><path d="M167 109h136V55" stroke="#fff" opacity=".65"/><text x="300" y="45" fill="#e0f3f3" font-size="11" text-anchor="end">One table</text><text x="180" y="300" fill="#bad8dc" font-size="11" text-anchor="middle" letter-spacing="2">FOLLOW WHAT IS BENEATH</text></svg><span class="art-caption">Files · metadata · snapshots · safe change</span></div>
     <div class="metadata-map" role="img" aria-label="A catalog points to table metadata, then to a manifest list, then manifests, then data files."><div class="map-label">One table. A chain of evidence.</div><div class="map-flow">
     <div class="map-node">Catalog<small>Find the table</small></div><span class="map-arrow">→</span>
     <div class="map-node">Metadata<small>Choose a state</small></div><span class="map-arrow">→</span>
     <div class="map-node">Manifest list<small>Find manifests</small></div><span class="map-arrow">→</span>
     <div class="map-node">Manifests<small>Select files</small></div><span class="map-arrow">→</span>
     <div class="map-node">Data files<small>Read the rows</small></div></div></div></section>
+    <section class="path-section" aria-label="Suggested learning paths"><div class="section-intro"><h2>Choose your way in</h2><p>Start at the beginning, or follow your next question.</p></div><div class="path-grid">${paths.map((path,i)=>`<a class="path-card" href="#lesson/${path.start}"><span class="path-index">0${i+1} / ${path.time}</span><h3>${path.title} <span>↗︎</span></h3><p>${path.desc}</p><small>Sections ${path.parts.map(p=>parts[p][0]).join(' · ')}</small></a>`).join('')}</div><p class="path-note">Every lesson starts with fresh data. If a term is unfamiliar, use “The idea” and the optional hints before running code.</p></section>
     <div class="section-intro"><h2>From a file to a governed table</h2><p>Seven sections. One idea per lesson.</p></div>
-    <div class="course-grid">${parts.map(([number,title,desc],part)=>`<section class="part-card"><span class="part-number">PART ${number} / 6 LESSONS</span><h3>${title}</h3><p>${desc}</p><div class="card-lessons">${lessons.filter(l=>l.part===part).map(l=>`<a href="#lesson/${l.id}"><span>${String(lessons.indexOf(l)+1).padStart(2,'0')}</span>${l.title} →</a>`).join('')}</div></section>`).join('')}</div>
+    <div class="course-grid">${parts.map(([number,title,desc],part)=>`<section class="part-card"><span class="part-number">PART ${number} / 6 LESSONS</span><h3>${title}</h3><p>${desc}</p><div class="card-lessons">${lessons.filter(l=>l.part===part).map(l=>`<a href="#lesson/${l.id}"><span>${String(lessons.indexOf(l)+1).padStart(2,'0')}</span>${l.title} →</a>`).join('')}</div><span class="section-progress">${lessons.filter(l=>l.part===part&&reviewed.includes(l.id)).length} of 6 reviewed</span></section>`).join('')}</div>
     <div class="reading-note"><p><strong>Learn by investigating.</strong> Make a prediction, run the experiment, inspect the evidence, then change one thing. Every lesson has a worked explanation, so you can read first and run when ready.</p></div>
     <p class="story">Know basic SQL and a little Python. The <a href="https://snowch.github.io/parquet-book/">Parquet lab</a> explains the file beneath the table; the <a href="https://snowch.github.io/query-engine-book/">Query Engine lab</a> follows the work above it. You can start here without completing either.</p>`;
 }
 function guide(){
   $('content').innerHTML=`<article class="guide"><div class="eyebrow">Reference / Your laboratory</div><h1>A real table.<br>Inside your tab.</h1>
   <p class="lead">The page downloads a Python WASM runtime on your first experiment. PyIceberg creates the table, Arrow writes the files, and DuckDB runs SQL locally.</p>
-  <section><h2>How a lesson works</h2><p>Each lesson asks one question. Predict the outcome, run the editable Python, inspect its output and the warehouse, then compare it with the worked result. Try the suggested variation and answer the explanation check.</p><p>Every run recreates that lesson’s fixture. It does not continue the previous run or previous lesson. Your code edits and review progress are saved in this browser when storage is available. The warehouse itself is held in worker memory and is lost on reload, stopping the runtime, or starting another experiment.</p><p>Use <strong>Mark reviewed</strong> to track a reading path. It is a personal bookmark, not a certificate. Passing the original code check and the explanation question also marks the lesson reviewed. Variations may deliberately fail the original check; inspect the result and explain why.</p></section>
+  <section><h2>How a lesson works</h2><p>Each lesson asks one question. Predict the outcome, run the editable Python, inspect its output and the warehouse, then compare it with the worked result. Try the suggested variation and answer the explanation check.</p><p>Use the optional prediction and reflection notes to record your reasoning. They are saved only in this browser. Hints offer a starting point before revealing what evidence to inspect. Each section ends with an unfamiliar scenario and a self-review rubric; use it to test transfer rather than recognition.</p><p>Every run recreates that lesson’s fixture. It does not continue the previous run or previous lesson. Your code edits and review progress are saved in this browser when storage is available. The warehouse itself is held in worker memory and is lost on reload, stopping the runtime, or starting another experiment.</p><p>Use <strong>Mark reviewed</strong> to track a reading path. It is a personal bookmark, not a certificate. Passing the original code check and the explanation question also marks the lesson reviewed. Variations may deliberately fail the original check; inspect the result and explain why.</p></section>
   <section><h2>What actually runs</h2><table><thead><tr><th>Layer</th><th>Pinned implementation</th></tr></thead><tbody>
   <tr><td>Interpreter</td><td>Pyodide 314.0.3, in a Web Worker</td></tr><tr><td>Table library</td><td>PyIceberg 0.11.1 · format v2 fixtures</td></tr><tr><td>Catalog</td><td>PyIceberg SqlCatalog on local SQLite</td></tr><tr><td>Files</td><td>Real metadata JSON, Avro manifests and Parquet</td></tr><tr><td>Data / SQL</td><td>PyArrow 22.0.0 / DuckDB 1.5.1</td></tr><tr><td>Data</td><td>120 synthetic orders in the default fixture; no personal data</td></tr></tbody></table>
   <p>Self-hosted runtime assets cost roughly 46 MB uncompressed on first load. Browser caching and compression affect actual transfer. Startup may take tens of seconds. Nothing is downloaded for computation until you select Run. Static lesson assets load normally.</p>
@@ -108,19 +111,32 @@ function renderLesson(l){
   for(let n=0;n<idx%choices.length;n++)choices.push(choices.shift());
   $('content').innerHTML=`<article class="lesson"><div class="eyebrow">Part ${parts[l.part][0]} / ${parts[l.part][1]}</div>
   <h1>${l.title}</h1><div class="lesson-meta"><span>LESSON ${String(idx+1).padStart(2,'0')} / 42</span><span>≈ ${l.minutes} MIN</span><span class="badge ${l.kind==='Real Iceberg'?'':'model'}">${l.kind}</span></div>
+  <nav class="lesson-steps" aria-label="Lesson stages"><a href="#" data-jump="prediction">01 Predict</a><a href="#" data-jump="experiment">02 Investigate</a><a href="#" data-jump="worked">03 Explain</a><a href="#" data-jump="quiz">04 Apply</a></nav>
   <p class="goal">${escape(l.goal)}</p><p class="story">${escape(l.story)}</p>
-  <div class="predict"><span class="step-label">01 / Predict</span><p>${escape(l.predict)}</p></div>
-  <section class="experiment" aria-label="Editable experiment"><div class="experiment-head"><h2>Run the investigation</h2><span>02 / Execute & inspect</span></div>
+  <section class="concept"><span class="step-label">The idea</span><p>${escape(support[l.id].concept)}</p></section>
+  <div class="predict" id="prediction"><span class="step-label">01 / Predict</span><div><p>${escape(l.predict)}</p><label class="prediction-label" for="prediction-note">Your prediction and why <span>· optional, saved here</span></label><textarea id="prediction-note" class="learning-note" rows="2" placeholder="I expect… because…">${escape(store.get('prediction:'+l.id,''))}</textarea></div></div>
+  <section class="experiment" id="experiment" aria-label="Editable experiment"><div class="experiment-head"><h2>Run the investigation</h2><span>02 / Execute & inspect</span></div>
+  <div class="scaffold-row"><details class="learning-hint"><summary>Need a starting point?</summary><p>${escape(support[l.id].hint)}</p><details><summary>What evidence should I look for?</summary><p>${escape(support[l.id].notice)}</p></details></details><span class="fixture-reminder">Each run starts fresh.</span></div>
   <div id="runtime-status" class="runtime-status" role="status"><i class="dot"></i><span></span></div>
+  <details class="code-orientation"><summary>New to the code?</summary><p><code>table</code> is the real Iceberg table prepared for this lesson. <code>show(...)</code> prints evidence. <code>files()</code> lists the planned data files, and <code>metrics(...)</code> summarizes a scan. You can run the example unchanged first, then edit one value. Each run recreates the fixture; nothing from an earlier lesson is required.</p><p><code>sql(...)</code> runs DuckDB over an already materialized Iceberg scan. To study Iceberg pruning, pass a predicate to <code>metrics(...)</code> or <code>table.scan(row_filter=...)</code>. <a href="#guide">Read the laboratory guide</a> for definitions and runtime limits.</p></details>
   <div class="editor-shell"><div class="editor-bar"><span>experiment.py · editable Python</span><button id="reset-code">Reset code</button></div><label class="sr-only" for="code">Experiment code</label><textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Editable Python experiment">${escape(saved)}</textarea></div>
   <div class="run-bar"><button id="run" class="button primary">Run experiment <span>→</span></button><button id="stop" class="button subtle" ${worker?'':'hidden'}>Stop / restart</button><button id="export" class="button" disabled>Export warehouse ↓</button><span class="hint">Fresh fixture on every run · Ctrl / ⌘ + Enter</span></div>
   <details class="setup"><summary>Fixture setup & evidence check</summary><p>Executed before your code; each run starts independently.</p><pre>${escape(l.setup)}</pre><p>The evidence check below runs after your code. Variations can legitimately change these expected results.</p><pre>${escape(l.check)}</pre><p><a href="./python/lab.py">Read the fixture helpers</a> · <a href="#guide">Runtime & limits</a></p></details>
   <div id="result" aria-live="polite"></div></section>
-  <details class="worked"><summary>03 / Compare with the worked result</summary><p>${escape(l.worked)}</p></details>
+  <details class="worked" id="worked"><summary>03 / Compare with the worked result</summary><p>${escape(l.worked)}</p></details>
   <section class="change-box"><div class="eyebrow">04 / Change one thing</div><h2>Test your explanation</h2><p>${escape(l.change)}</p></section>
   <form class="quiz" id="quiz"><h2>Explain what happened</h2><p class="question">${escape(l.question)}</p>${choices.map(c=>`<label><input type="radio" name="answer" value="${c.index}" required><span>${escape(c.text)}</span></label>`).join('')}<button class="button" type="submit">Check explanation →</button><p class="quiz-feedback" id="quiz-feedback" role="status"></p></form>
+  <section class="reflection"><label for="reflection-note">Explain it in your own words</label><p>What did the evidence change about your prediction? Name one situation where this idea would help.</p><textarea id="reflection-note" class="learning-note" rows="2" placeholder="The evidence shows… This matters when…">${escape(store.get('reflection:'+l.id,''))}</textarea></section>
+  ${idx%6===5?`<section class="transfer"><span class="step-label">Section ${parts[l.part][0]} / Use it elsewhere</span><h2>${sectionReviews[l.part][0]}</h2><p>${sectionReviews[l.part][1]}</p><details><summary>Review your explanation</summary><ul>${sectionReviews[l.part][2].map(point=>`<li>${point}</li>`).join('')}</ul><p>Explain this without looking back. If a link is missing, revisit one lesson and try again.</p></details></section>`:''}
   <div class="review-bar"><span id="review-text"></span><button id="review" class="button subtle"></button></div>
   <nav class="pagination" aria-label="Lesson navigation"><a href="${prev?'#lesson/'+prev.id:'#'}"><small>← ${prev?'Previous lesson':'Course overview'}</small>${prev?.title||'See the learning path'}</a><a href="${next?'#lesson/'+next.id:'#'}"><small>${next?'Next lesson':'Back to overview'} →</small>${next?.title||'Review your learning'}</a></nav></article>`;
+  for(const [element,key] of [['prediction-note','prediction'],['reflection-note','reflection']]){
+    $(element).oninput=()=>store.set(key+':'+l.id,$(element).value);
+  }
+  document.querySelectorAll('[data-jump]').forEach(link=>link.onclick=event=>{
+    event.preventDefault();const target=$(link.dataset.jump);if(target.tagName==='DETAILS')target.open=true;
+    target.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth',block:'start'});
+  });
   $('code').style.height=Math.min(600,Math.max(190,saved.split('\n').length*22+30))+'px';
   $('code').oninput=()=>store.set('draft:'+l.id,$('code').value);
   $('code').onkeydown=event=>{
@@ -133,7 +149,7 @@ function renderLesson(l){
   $('quiz').onsubmit=event=>{
     event.preventDefault();const picked=new FormData(event.currentTarget).get('answer');
     const ok=Number(picked)===l.answer;quizAnswers.set(l.id,ok);
-    $('quiz-feedback').textContent=ok?'Correct. '+l.choices[l.answer]+'. Explain how your evidence supports this.':'Revisit the worked result, then try again. Look for the boundary or mechanism behind the observation.';
+    $('quiz-feedback').textContent=ok?'Correct. '+l.choices[l.answer]+'. Explain how your evidence supports this.':'Try again using this evidence: '+support[l.id].notice+' Open the worked result if you need the full explanation.';
     if(ok&&passRuns.has(l.id))markReviewed(l.id);
   };
   $('review').onclick=()=>{
@@ -225,12 +241,12 @@ function download(data,name,type){
 function renderResult(result){
   const e=result.evidence;
   $('result').innerHTML=`<div class="output"><div class="output-title"><span>Observed output</span><span>${result.elapsed_ms.toLocaleString()} ms · includes setup + check</span></div><pre>${escape(result.output||'(No printed output. Use show(...) or print(...) to inspect a result.)')}</pre></div>
-  <p class="feedback ${result.passed?'':'error'}">${escape(result.feedback)}</p>
+  <p class="feedback ${result.passed?'':'error'}">${escape(result.feedback)}</p><p class="evidence-cue"><strong>Read the evidence:</strong> ${escape(support[result.lesson].notice)}${result.passed?'':' A changed experiment may intentionally differ from the original check; compare the output before deciding it is wrong.'}</p>
   <div class="evidence-grid">${[[e.rows,'Visible rows'],[e.live_files,'Live data files'],[e.snapshots,'Retained snapshots'],[e.schema_id,'Current schema ID']].map(([v,label])=>`<div class="metric"><strong>${v}</strong><span>${label}</span></div>`).join('')}</div>
   <details class="evidence-details"><summary>Snapshot history & current metadata</summary><pre>${escape(JSON.stringify({metadata:e.metadata,spec_id:e.spec_id,history:e.history},null,2))}</pre></details>
   <details class="evidence-details"><summary>Inspect warehouse · ${e.warehouse.length} physical files</summary><p>Includes current and retained files. Click a file to decode it in the worker. Available until the next run or restart.</p><div class="file-list">${e.warehouse.map((f,i)=>`<button data-file="${i}" ${warehouseOwner===current.id?'':'disabled'}>${escape(f.path)} <span>(${f.bytes.toLocaleString()} B)</span></button>`).join('')}</div><pre id="inspector" class="inspector">Select a file to inspect its contents.</pre></details>
   <button class="button subtle" id="export-evidence">Export evidence ↓</button>`;
-  $('export-evidence').onclick=()=>download(JSON.stringify({...result,exported_at:new Date().toISOString(),runtime:'Pyodide 314.0.3 / PyIceberg 0.11.1'},null,2),`iceberg-${result.lesson}-evidence.json`,'application/json');
+  $('export-evidence').onclick=()=>download(JSON.stringify({...result,prediction:store.get('prediction:'+result.lesson,''),reflection:store.get('reflection:'+result.lesson,''),exported_at:new Date().toISOString(),runtime:'Pyodide 314.0.3 / PyIceberg 0.11.1'},null,2),`iceberg-${result.lesson}-evidence.json`,'application/json');
   document.querySelectorAll('[data-file]').forEach(button=>button.onclick=()=>{
     if(busy||warehouseOwner!==current.id)return;
     $('inspector').textContent='Decoding file locally…';setBusy(true);

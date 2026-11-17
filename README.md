@@ -113,3 +113,14 @@ Their Apache-2.0 headers are retained; see `THIRD_PARTY_LICENSE_APACHE_2.0.txt` 
 The runtime packager was changed to use proxy-aware curl downloads and verify SHA-256 integrity.
 No prose, visual assets or implementation from Chris Snow's other labs is copied here.
 Apache Iceberg, PyIceberg, Arrow, DuckDB and Pyodide remain their respective projects and trademarks.
+
+## Learning and design refinements
+
+Every lesson includes a concept explanation, optional saved prediction/reflection, progressive hints and an
+output-reading cue. Each section ends with a transfer scenario and self-review rubric. Three task-oriented
+entry paths complement the full sequence. These additions remain optional so the core lessons stay focused.
+
+`public/learning.js` holds lesson scaffolds and section review prompts. `public/refinement.css` holds the
+responsive visual refinements. [Learning, UX and design review](docs/learning-ux-review.md) records the review
+criteria, available skill guidance, changes, verification and the distinction between implementation checks
+and evidence of learning effectiveness.
