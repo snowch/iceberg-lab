@@ -1,0 +1,2257 @@
+{
+  "lessons": [
+    {
+      "id": "catalog",
+      "part": 0,
+      "title": "How a query finds its table",
+      "goal": "Resolve a table name to its current metadata file.",
+      "story": "Imagine a sales dashboard querying shop.orders: orders is the table, and shop groups related tables. Before opening data files, the reader asks the catalog which metadata file describes that table now.",
+      "predict": "Will creating a table create a data file?",
+      "code": "show(catalog.list_tables('shop'))\nshow({'metadata': table.metadata_location,\n      'rows': table.scan().count(),\n      'data_files': len(files())})",
+      "check": "assert table.scan().count() == 0\nassert len(files()) == 0\nassert Path(table.metadata_location.replace('file://','')).exists()",
+      "worked": "The name resolves to a metadata JSON file. The empty table has a schema and a location but no data files or snapshots. Catalog state and data state are different layers.",
+      "change": "Change the setup to reset(batches=1). Find what appears after the first append.",
+      "question": "What does the catalog resolve?",
+      "choices": [
+        "A table name to its metadata location",
+        "A row ID to a byte offset",
+        "A SQL query to its final answer"
+      ],
+      "answer": 0,
+      "setup": "reset(batches=0)",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "membership",
+      "part": 0,
+      "title": "A directory is not a table",
+      "goal": "Distinguish physical files from committed table membership.",
+      "story": "A failed job leaves an extra Parquet file beside the table. A directory scan could accidentally include it.",
+      "predict": "Will the extra file change an Iceberg count?",
+      "code": "before = table.scan().count()\nextra = Path(table.location().replace('file://','')) / 'data' / 'uncommitted.parquet'\npq.write_table(pa.table({'order_id':[99999]}), extra)\nafter = table.scan().count()\nshow({'before':before, 'after':after, 'extra_exists':extra.exists()})",
+      "check": "assert before == after == 120\nassert extra.exists()",
+      "worked": "The count stays at 120. Iceberg reads the files referenced by the snapshot, so the uncommitted file is invisible. Its presence alone does not prove it is safe to delete in a live system.",
+      "change": "Give the extra file ten rows. Does the count change?",
+      "question": "What establishes membership?",
+      "choices": [
+        "The committed metadata graph",
+        "A .parquet suffix",
+        "The newest directory timestamp"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "metadata",
+      "part": 0,
+      "title": "Read the metadata JSON",
+      "goal": "Locate the current snapshot, schema and partition specification.",
+      "story": "You need to explain what changed without opening a single data file.",
+      "predict": "Are schemas and snapshots stored in the same metadata document?",
+      "code": "metadata_path = Path(table.metadata_location.replace('file://',''))\nmetadata = json.loads(metadata_path.read_text())\nshow({key:metadata[key] for key in ['format-version','current-snapshot-id','current-schema-id','default-spec-id']})\nshow({'schemas':len(metadata['schemas']), 'snapshots':len(metadata['snapshots'])})",
+      "check": "assert metadata['format-version'] == 2\nassert len(metadata['snapshots']) == 3",
+      "worked": "The metadata document records the current identifiers and historical definitions. The catalog pointer chooses this metadata version; the directory may contain older versions too.",
+      "change": "Print the snapshot-log and compare its entries with the snapshots array.",
+      "question": "Why can there be several metadata JSON files?",
+      "choices": [
+        "Each commit can write a new immutable metadata version",
+        "Each region must have one",
+        "Each JSON file contains a different data row"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "manifest-list",
+      "part": 0,
+      "title": "Open a manifest list",
+      "goal": "Follow one snapshot to its manifest files.",
+      "story": "The current snapshot points to an Avro manifest list. It summarizes manifests so a planner can avoid unnecessary work.",
+      "predict": "Will the list contain order rows or references to manifests?",
+      "code": "snapshot = table.current_snapshot()\nmanifest_list = list(read_manifest_list(table.io.new_input(snapshot.manifest_list)))\nshow({'snapshot':str(snapshot.snapshot_id),'manifest_list':snapshot.manifest_list})\nshow([{'path':m.manifest_path,'spec_id':m.partition_spec_id,\n       'added_files':m.added_files_count,'existing_files':m.existing_files_count}\n      for m in manifest_list])",
+      "check": "assert len(manifest_list) > 0\nassert all(m.manifest_path.endswith('.avro') for m in manifest_list)",
+      "worked": "The list contains manifest references, not order rows. File counts describe entries in each manifest; an existing manifest can be reused by a later snapshot.",
+      "change": "Inspect the first snapshot’s list using table.metadata.snapshots[0].",
+      "question": "What does a manifest list reference?",
+      "choices": [
+        "Manifest files",
+        "Individual SQL operators",
+        "Only Parquet row groups"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "manifest",
+      "part": 0,
+      "title": "Read file entries",
+      "goal": "Find data-file paths and record counts in a manifest.",
+      "story": "Before a planner opens Parquet, Iceberg already knows a file’s size, record count and statistics.",
+      "predict": "Can you account for all 120 rows from live file entries?",
+      "code": "entries = []\nfor manifest in table.current_snapshot().manifests(table.io):\n    for entry in manifest.fetch_manifest_entry(table.io):\n        entries.append({'path':entry.data_file.file_path,\n                        'rows':entry.data_file.record_count,\n                        'bytes':entry.data_file.file_size_in_bytes})\nshow(entries)\nshow({'manifest_records':sum(e['rows'] for e in entries)})",
+      "check": "assert sum(e['rows'] for e in entries) == 120\nassert len(entries) == 3",
+      "worked": "Three append files contribute 40 rows each. These are live entries in this append-only fixture. With row-level deletes, summing record counts alone does not necessarily give the visible row count.",
+      "change": "Print entry.status and entry.snapshot_id alongside each path.",
+      "question": "Where can file-level statistics be available?",
+      "choices": [
+        "In manifest entries before opening Parquet",
+        "Only in SQL output",
+        "Only in the catalog name"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "parquet-ids",
+      "part": 0,
+      "title": "Find identity in Parquet",
+      "goal": "Inspect field IDs embedded in an actual data file.",
+      "story": "A column name may change while its stored bytes stay where they are. Readers need stable identity.",
+      "predict": "Will the Parquet schema carry Iceberg field IDs?",
+      "code": "path = files()[0].file.file_path.replace('file://','')\nparquet = pq.ParquetFile(path)\nfields = [{'name':f.name,'id':(f.metadata or {}).get(b'PARQUET:field_id',b'').decode()}\n          for f in parquet.schema_arrow]\nshow(fields)\nshow({'rows':parquet.metadata.num_rows,'row_groups':parquet.metadata.num_row_groups})",
+      "check": "assert [f['id'] for f in fields] == ['1','2','3']",
+      "worked": "The Parquet columns carry IDs 1, 2 and 3. Iceberg uses field identity when resolving evolved schemas. A plain Parquet reader looking only at names does not perform that table-level resolution.",
+      "change": "Compare those IDs with table.schema().fields.",
+      "question": "What survives a supported rename?",
+      "choices": [
+        "The field ID",
+        "The old SQL spelling must remain current",
+        "A new data file is required"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "snapshots",
+      "part": 1,
+      "title": "Trace snapshot ancestry",
+      "goal": "Follow the parent links created by successive appends.",
+      "story": "Three ingest batches have committed. You need to explain which state each commit produced.",
+      "predict": "Will each append create a snapshot with a new parent link?",
+      "code": "chain = history()\nshow(chain)\nshow({'visible_rows':table.scan().count()})",
+      "check": "assert len(chain) == 3\nassert chain[1]['parent'] == chain[0]['id']\nassert chain[2]['parent'] == chain[1]['id']",
+      "worked": "The three snapshots form a parent chain. A snapshot describes a complete table state using referenced files; it is not just a standalone batch of new rows.",
+      "change": "Append batch 3, then print the new chain.",
+      "question": "What does a snapshot represent?",
+      "choices": [
+        "A table state",
+        "Only rows newly inserted by that commit",
+        "A copy of every data file"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "time-travel",
+      "part": 1,
+      "title": "Read an earlier snapshot",
+      "goal": "Query two states of the same table.",
+      "story": "A report from yesterday needs to be reproduced after more data arrives.",
+      "predict": "How many rows are visible in the first snapshot?",
+      "code": "first = table.metadata.snapshots[0].snapshot_id\nthen = sql('SELECT count(*) AS n, sum(amount) AS total FROM orders', first)\nnow = sql('SELECT count(*) AS n, sum(amount) AS total FROM orders')\nshow({'first_snapshot':str(first),'then':then,'now':now})",
+      "check": "assert then[0]['n'] == 40\nassert now[0]['n'] == 120",
+      "worked": "The first snapshot has 40 rows; the current one has 120. The ID selects the state before SQL runs. Reproducibility also requires retaining its files and knowing the query and software versions.",
+      "change": "Read the second snapshot instead. Predict its count before running.",
+      "question": "What must remain available for time travel?",
+      "choices": [
+        "The retained snapshot and its referenced files",
+        "Only a snapshot ID written in a notebook",
+        "Only the newest metadata file"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "immutable",
+      "part": 1,
+      "title": "Watch an append reuse files",
+      "goal": "Prove that an append preserves existing data files.",
+      "story": "You want to distinguish logical table growth from rewriting all existing data.",
+      "predict": "Will an append replace the paths of the original three files?",
+      "code": "before = {f.file.file_path for f in files()}\nappend(3)\nafter = {f.file.file_path for f in files()}\nshow({'reused':len(before & after),'new':len(after-before),'rows':table.scan().count()})",
+      "check": "assert before <= after\nassert len(after-before) == 1\nassert table.scan().count() == 160",
+      "worked": "All three old files remain referenced and one file is added. New metadata and manifests describe the new state without copying the older Parquet files.",
+      "change": "Append another distinct batch and compare the sets again.",
+      "question": "Which cost is intrinsic to this append?",
+      "choices": [
+        "Writing new data and committing new metadata",
+        "Rewriting every old row",
+        "Deleting all old snapshots"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "rename",
+      "part": 1,
+      "title": "Rename without rewriting",
+      "goal": "Use field identity to read old files under a new name.",
+      "story": "The business calls region “market”. Existing data must still be readable.",
+      "predict": "Will file paths or the region field ID change?",
+      "code": "before = {f.file.file_path for f in files()}\nold_id = table.schema().find_field('region').field_id\nwith table.update_schema() as update:\n    update.rename_column('region','market')\nnew_id = table.schema().find_field('market').field_id\nshow({'old_id':old_id,'new_id':new_id,'same_files':before == {f.file.file_path for f in files()}})\nshow(sql('SELECT market, count(*) AS n FROM orders GROUP BY market ORDER BY market'))",
+      "check": "assert old_id == new_id == 2\nassert before == {f.file.file_path for f in files()}\nassert table.scan().count() == 120",
+      "worked": "The field remains ID 2, the existing files are reused, and current queries use market. Schema evolution commits metadata but does not itself create a new data snapshot.",
+      "change": "Inspect a Parquet schema after the rename. Its stored name is still region.",
+      "question": "Why does the renamed column still read correctly?",
+      "choices": [
+        "Iceberg maps the stable field ID",
+        "It rewrites every Parquet footer",
+        "It guesses names from column order"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "add-column",
+      "part": 1,
+      "title": "Add an optional column",
+      "goal": "Observe nulls for data written before a field existed.",
+      "story": "A priority flag is added to a table whose historical files never stored it.",
+      "predict": "What will the 120 existing rows contain for priority?",
+      "code": "with table.update_schema() as update:\n    update.add_column('priority',StringType())\nresult = sql('SELECT count(*) AS rows, count(priority) AS populated FROM orders')\nshow(result)\nshow([{'name':f.name,'id':f.field_id} for f in table.schema().fields])",
+      "check": "assert result[0]['rows'] == 120\nassert result[0]['populated'] == 0",
+      "worked": "The new optional field reads as null for old rows in this fixture. Adding a column does not backfill business values into previously written data.",
+      "change": "Change the query to count rows WHERE priority IS NULL.",
+      "question": "What does adding this optional field do to old files?",
+      "choices": [
+        "Leaves them in place and resolves the missing field as null",
+        "Writes a priority value into every file",
+        "Drops their rows"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "readd",
+      "part": 1,
+      "title": "A reused name is a new field",
+      "goal": "Distinguish a dropped field from a new field with the same name.",
+      "story": "A developer drops amount and later adds another amount. The spelling matches, but the identity must not.",
+      "predict": "Will the replacement expose historical amount values?",
+      "code": "old_id = table.schema().find_field('amount').field_id\nwith table.update_schema() as update:\n    update.delete_column('amount')\nwith table.update_schema() as update:\n    update.add_column('amount',DoubleType())\nnew_id = table.schema().find_field('amount').field_id\nresult = sql('SELECT count(amount) AS populated FROM orders')\nshow({'old_id':old_id,'new_id':new_id,'result':result})",
+      "check": "assert new_id > old_id\nassert result[0]['populated'] == 0",
+      "worked": "The replacement receives a new field ID and old rows read null for it. Reusing a name does not resurrect the old field’s values.",
+      "change": "Inspect the Parquet field ID for amount and compare it with the current schema.",
+      "question": "Is the replacement amount the old field?",
+      "choices": [
+        "No; its field ID is different",
+        "Yes; names establish identity",
+        "Yes; because its numeric type matches"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "baseline",
+      "part": 2,
+      "title": "Measure the candidate scan",
+      "goal": "Establish file and record counts before optimizing.",
+      "story": "A filtered query returns little data, but that does not tell you how much data was considered.",
+      "predict": "How many candidate records exist in the unfiltered scan?",
+      "code": "baseline = metrics()\nshow(baseline)\nshow(sql('SELECT count(*) AS returned FROM orders WHERE order_id = 0'))",
+      "check": "assert baseline['selected_files'] == 3\nassert baseline['candidate_records'] == 120",
+      "worked": "The baseline contains three files and 120 candidate records. The SQL helper materializes the Iceberg scan before SQL filtering, so this SQL predicate does not demonstrate Iceberg pushdown.",
+      "change": "Compare metrics(\"order_id = 0\") with the baseline to ask Iceberg to plan a filtered scan.",
+      "question": "Can one returned row prove only one row was scanned?",
+      "choices": [
+        "No; output cardinality and scan work differ",
+        "Yes, always",
+        "Only when the result has one column"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "bounds",
+      "part": 2,
+      "title": "Skip files with bounds",
+      "goal": "Pass a predicate to Iceberg and inspect file pruning.",
+      "story": "Order IDs arrive in disjoint ranges. A point lookup should eliminate unrelated files.",
+      "predict": "Which of the three files can contain order_id 1005?",
+      "code": "all_files = metrics()\npruned = metrics('order_id = 1005')\nshow({'all':all_files,'pruned':pruned})\nshow(table.scan(row_filter='order_id = 1005').to_arrow())",
+      "check": "assert pruned['selected_files'] == 1\nassert pruned['candidate_records'] == 40\nassert table.scan(row_filter='order_id = 1005').count() == 1",
+      "worked": "The planner selects one 40-row file using bounds, then evaluates the row filter. The candidate count is larger than the one matching row. Selected file bytes are a size sum, not measured network traffic.",
+      "change": "Use order_id = 999999. Predict how many files survive.",
+      "question": "What does a bound prove?",
+      "choices": [
+        "A file can be ruled out when its range cannot match",
+        "Every value inside the range exists",
+        "A matching file contains only matching rows"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "residual",
+      "part": 2,
+      "title": "Separate pruning from filtering",
+      "goal": "Identify why a kept file still needs a row filter.",
+      "story": "A region filter matches half the orders, but every unpartitioned file contains both regions.",
+      "predict": "Can file bounds remove any whole file for region = EU?",
+      "code": "planned = metrics(\"region = 'EU'\")\nmatched = table.scan(row_filter=\"region = 'EU'\").count()\nshow({'plan':planned,'matched_rows':matched})",
+      "check": "assert planned['selected_files'] == 3\nassert planned['candidate_records'] == 120\nassert matched == 60",
+      "worked": "All files survive, but only 60 rows match. Keeping a file means it may match, not that every row matches. The residual predicate must still be evaluated.",
+      "change": "Compare region = US and region = APAC.",
+      "question": "Why are all three files kept for EU?",
+      "choices": [
+        "Each file may contain EU rows",
+        "The filter is ignored",
+        "Iceberg cannot ever filter strings"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "identity-partition",
+      "part": 2,
+      "title": "Partition for one predicate",
+      "goal": "Observe file pruning on a real identity-partitioned table.",
+      "story": "Queries frequently select one region. You write each batch into identity partitions.",
+      "predict": "Will partitioning reduce candidate records for region = EU?",
+      "code": "planned = metrics(\"region = 'EU'\")\nshow(planned)\nshow([{'spec_id':f.file.spec_id,'partition':str(f.file.partition),'rows':f.file.record_count}\n      for f in files()])",
+      "check": "assert planned['total_files'] == 6\nassert planned['selected_files'] == 3\nassert planned['candidate_records'] == 60",
+      "worked": "Three batches create six files, one per region per batch. The EU scan keeps three files and 60 candidate rows. Better pruning comes with more files to manage.",
+      "change": "Compare an order_id predicate on this layout. Does partitioning help every query equally?",
+      "question": "What is the tradeoff here?",
+      "choices": [
+        "Fewer candidate rows for region filters but more files",
+        "Every query becomes faster by definition",
+        "Partitioning eliminates metadata work"
+      ],
+      "answer": 0,
+      "setup": "reset(partitioned=True)",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "partition-evolution",
+      "part": 2,
+      "title": "Evolve the specification",
+      "goal": "Read old and new files under different partition specs.",
+      "story": "The first three batches were unpartitioned. You add a region partition without rewriting their data.",
+      "predict": "Will existing files acquire region partition values?",
+      "code": "old_paths = {f.file.file_path for f in files()}\nwith table.update_spec() as update:\n    update.add_field('region',IdentityTransform(),'region_part')\nappend(3)\nshow([{'spec':f.file.spec_id,'partition':str(f.file.partition)} for f in files()])\nshow(metrics(\"region = 'EU'\"))",
+      "check": "assert old_paths <= {f.file.file_path for f in files()}\nassert {f.file.spec_id for f in files()} == {0,1}\nassert metrics(\"region = 'EU'\")['candidate_records'] == 140",
+      "worked": "The original three files retain spec 0. The new two files use spec 1. An EU scan still considers the 120 old rows plus 20 new EU rows; evolution alone does not reorganize old data.",
+      "change": "Append another batch and compare candidate records with total records.",
+      "question": "Does changing the spec rewrite historical files?",
+      "choices": [
+        "No; old and new specs coexist",
+        "Yes; all files move immediately",
+        "Only file names change"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "hidden-transforms",
+      "part": 2,
+      "title": "Reason about hidden transforms",
+      "goal": "Translate a source predicate into safe partition candidates.",
+      "story": "A production table partitions timestamps by day. Queries should use timestamps while the planner derives day candidates.",
+      "predict": "How many day partitions overlap a window crossing midnight?",
+      "code": "from datetime import datetime, timedelta\nstart = datetime(2026,1,1,23,30)\nend = datetime(2026,1,2,0,30)\n# A small day-projection model; this does not write a partitioned table.\ndays = []\ncursor = start.date()\nwhile cursor <= (end-timedelta(microseconds=1)).date():\n    days.append(cursor.isoformat())\n    cursor += timedelta(days=1)\nshow({'half_open_window':[str(start),str(end)],'candidate_days':days})",
+      "check": "assert days == ['2026-01-01','2026-01-02']",
+      "worked": "Two day partitions may match. Rows outside the time window can still occur in both, so the timestamp predicate remains necessary. This model teaches projection; the pinned browser writer supports identity partitioning, not native day/bucket writes.",
+      "change": "Set end to exactly midnight. The half-open interval should keep only the first day.",
+      "question": "Why keep the timestamp predicate?",
+      "choices": [
+        "Day projection is coarser than the original time window",
+        "Partitions are always corrupt",
+        "The query must spell a physical partition column"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Planning model",
+      "minutes": 5
+    },
+    {
+      "id": "small-files",
+      "part": 3,
+      "title": "Count the cost of tiny batches",
+      "goal": "Compare file counts for the same logical data.",
+      "story": "A stream commits each row separately. The rows are correct, but there is a file and commit for every append.",
+      "predict": "Will 12 one-row appends create fewer files than one 12-row append?",
+      "code": "reset(batches=0)\nfor batch in range(12):\n    append(batch, rows=1)\ntiny = {'files':len(files()),'rows':table.scan().count(),'snapshots':len(history())}\nreset(batches=0)\nappend(0, rows=12)\nbulk = {'files':len(files()),'rows':table.scan().count(),'snapshots':len(history())}\nshow({'tiny':tiny,'bulk':bulk})",
+      "check": "assert tiny['rows'] == bulk['rows'] == 12\nassert tiny['files'] == 12 and bulk['files'] == 1",
+      "worked": "Twelve commits create twelve files versus one. These fixtures compare operation overhead at equal row counts, not equivalent row values or production throughput. Both paths also have metadata costs.",
+      "change": "Try 24 one-row appends. Keep fixtures small enough for the browser.",
+      "question": "What typically grows with tiny commits?",
+      "choices": [
+        "File and metadata overhead",
+        "Only the number of table columns",
+        "The logical row count must change"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "compact",
+      "part": 3,
+      "title": "Rewrite a fragmented table",
+      "goal": "Preserve rows while reducing the number of live files.",
+      "story": "The table has three small files. A controlled full-table rewrite can consolidate them.",
+      "predict": "Will old physical files disappear when the current snapshot stops using them?",
+      "code": "before_paths = {f.file.file_path for f in files()}\nbefore_rows = sorted(table.scan().to_arrow().to_pylist(),key=lambda r:r['order_id'])\ntable.overwrite(table.scan().to_arrow())\nafter_rows = sorted(table.scan().to_arrow().to_pylist(),key=lambda r:r['order_id'])\nshow({'before_files':len(before_paths),'after_files':len(files()),\n      'old_files_still_exist':all(Path(p.replace('file://','')).exists() for p in before_paths)})",
+      "check": "assert before_rows == after_rows\nassert len(files()) == 1\nassert all(Path(p.replace('file://','')).exists() for p in before_paths)",
+      "worked": "The full rewrite produces one live file and preserves the rows. Old files remain for history. This is a small-table consolidation experiment using overwrite, not a distributed production compaction procedure.",
+      "change": "Compare selected_file_bytes before and after the rewrite. File count and compressed bytes need not fall by the same ratio.",
+      "question": "What did this rewrite reduce immediately?",
+      "choices": [
+        "The current snapshot’s live file count",
+        "All historical storage",
+        "The number of rows"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "delete",
+      "part": 3,
+      "title": "Observe a copy-on-write delete",
+      "goal": "Identify which file changes when a row is deleted.",
+      "story": "One order must be removed. The browser writer implements this operation by rewriting affected data.",
+      "predict": "Will deleting one row require rewriting every file?",
+      "code": "before = {f.file.file_path for f in files()}\ntable.delete('order_id = 0')\nafter = {f.file.file_path for f in files()}\nshow({'removed_from_current':len(before-after),'new_files':len(after-before),\n      'reused_files':len(before & after),'rows':table.scan().count()})",
+      "check": "assert table.scan().count() == 119\nassert len(before & after) == 2\nassert len(after-before) == 1",
+      "worked": "One affected file is replaced; two others are reused. The original file remains physically present. This is copy-on-write, not a positional or equality delete-file demonstration.",
+      "change": "Delete order_id >= 2000. Compare whole-file removal with a partial-file rewrite.",
+      "question": "Why are two files reused?",
+      "choices": [
+        "They contain no rows matching this delete",
+        "Deletes only affect the newest file",
+        "A catalog cannot replace multiple files"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "deleted-history",
+      "part": 3,
+      "title": "Find deleted rows in history",
+      "goal": "Demonstrate why a logical delete is not complete erasure.",
+      "story": "A current query no longer finds a customer’s order. Historical readers may still see it.",
+      "predict": "Will an earlier retained snapshot still contain the deleted order?",
+      "code": "old = table.current_snapshot().snapshot_id\ntable.delete('order_id = 0')\ncurrent = sql('SELECT count(*) AS n FROM orders WHERE order_id = 0')\nhistorical = sql('SELECT count(*) AS n FROM orders WHERE order_id = 0',old)\nshow({'current':current,'historical':historical})",
+      "check": "assert current[0]['n'] == 0\nassert historical[0]['n'] == 1",
+      "worked": "The current state has zero matches; the retained state has one. An erasure process must account for snapshots, retained files, object versions, replicas, exports and backups according to its requirements.",
+      "change": "List the old snapshot’s files and check whether they still exist.",
+      "question": "Does a successful DELETE prove complete erasure?",
+      "choices": [
+        "No; retained copies and history must be addressed",
+        "Yes; all snapshots are modified in place",
+        "Yes; if the latest query returns no rows"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "expire",
+      "part": 3,
+      "title": "Expire a snapshot reference",
+      "goal": "Separate loss of time travel from physical file cleanup.",
+      "story": "You decide that the oldest snapshot no longer needs to be queryable.",
+      "predict": "Will metadata expiration automatically prove all old data files are gone?",
+      "code": "oldest = table.metadata.snapshots[0].snapshot_id\nphysical_before = len(list(Path(ROOT).rglob('*.parquet')))\ntable.maintenance.expire_snapshots().by_id(oldest).commit()\nphysical_after = len(list(Path(ROOT).rglob('*.parquet')))\nshow({'remaining_snapshots':len(history()),'parquet_before':physical_before,'parquet_after':physical_after})\nshow({'expired_id_present':any(s.snapshot_id == oldest for s in table.metadata.snapshots)})",
+      "check": "assert len(history()) == 2\nassert all(s.snapshot_id != oldest for s in table.metadata.snapshots)\nassert physical_before == physical_after",
+      "worked": "The oldest snapshot leaves current metadata. PyIceberg’s metadata-only expiration in this runtime does not delete its files. Files may also still be referenced by other snapshots, so expiration is not a storage-reclamation count.",
+      "change": "Inspect current rows after expiration. They remain unchanged.",
+      "question": "What has this operation established?",
+      "choices": [
+        "The expired snapshot is no longer retained by current metadata",
+        "Every file it used is now safe to remove",
+        "All its rows disappeared from the current table"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "orphans",
+      "part": 3,
+      "title": "Check every retained snapshot",
+      "goal": "Avoid calling historical files orphaned just because they are not current.",
+      "story": "After a rewrite, old data files are absent from the current scan but still needed for time travel.",
+      "predict": "Will current-file membership be enough to identify safe cleanup candidates?",
+      "code": "table.overwrite(table.scan().to_arrow())\ncurrent_paths = {f.file.file_path for f in files()}\nretained_paths = set()\nfor snapshot in table.metadata.snapshots:\n    retained_paths.update(f.file.file_path for f in files(snapshot.snapshot_id))\nhistorical_only = retained_paths-current_paths\nshow({'current_files':len(current_paths),'retained_files':len(retained_paths),\n      'historical_only':len(historical_only)})",
+      "check": "assert len(historical_only) == 3\nassert all(Path(p.replace('file://','')).exists() for p in historical_only)",
+      "worked": "Three files are historical-only and still referenced. This is an inventory of data files in one local table, not a production orphan-deletion algorithm. Real cleanup must handle metadata files, other references, in-flight writes, path normalization and an age safety window.",
+      "change": "Inspect the first snapshot count to verify those files are still useful.",
+      "question": "Which set is unsafe to treat automatically as garbage?",
+      "choices": [
+        "All physical files minus current files",
+        "Files proven unreferenced after a safe age window",
+        "Files belonging to a deliberately deleted temporary export"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "stale-commit",
+      "part": 4,
+      "title": "Reject a stale schema commit",
+      "goal": "Observe an optimistic-concurrency failure from the real catalog.",
+      "story": "Two writers read the same schema. Both try to evolve it independently.",
+      "predict": "Can both schema changes commit against the same starting schema ID?",
+      "code": "from pyiceberg.exceptions import CommitFailedException\nwriter_a = catalog.load_table('shop.orders')\nwriter_b = catalog.load_table('shop.orders')\nchange_a = writer_a.update_schema().add_column('note_a',StringType())\nchange_b = writer_b.update_schema().add_column('note_b',StringType())\nchange_a.commit()\nrejected = False\ntry:\n    change_b.commit()\nexcept CommitFailedException as error:\n    rejected = True\n    print(type(error).__name__, str(error))\ntable = catalog.load_table('shop.orders')\nshow({'second_rejected':rejected,'columns':table.schema().column_names})",
+      "check": "assert rejected\nassert 'note_a' in table.schema().column_names\nassert 'note_b' not in table.schema().column_names",
+      "worked": "The second commit fails because its schema requirement is stale. The SQLite catalog performs the check for this sequential interleaving. This proves a conflict condition, not distributed lock timing or service availability.",
+      "change": "Swap the commit order and predict which column is present.",
+      "question": "What should a stale writer do next?",
+      "choices": [
+        "Reload and revalidate its intended change",
+        "Blindly replace the latest metadata pointer",
+        "Delete the other writer’s metadata"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "retry",
+      "part": 4,
+      "title": "Rebase a compatible change",
+      "goal": "Reload catalog state before applying another evolution.",
+      "story": "Another writer has already added a note. Your independent source column still needs to be added.",
+      "predict": "Can reloading preserve the other writer’s change?",
+      "code": "writer_a = catalog.load_table('shop.orders')\nwith writer_a.update_schema() as update:\n    update.add_column('note',StringType())\n# Re-read current state, then apply the independent intended change.\nwriter_b = catalog.load_table('shop.orders')\nwith writer_b.update_schema() as update:\n    update.add_column('source',StringType())\ntable = catalog.load_table('shop.orders')\nshow([{'name':f.name,'id':f.field_id} for f in table.schema().fields])",
+      "check": "assert {'note','source'} <= set(table.schema().column_names)\nassert len({f.field_id for f in table.schema().fields}) == 5",
+      "worked": "Both changes survive with distinct IDs. Reloading is necessary but not sufficient for every retry: conflicting business operations may need rejection or recomputation.",
+      "change": "Try adding source twice and inspect the validation error.",
+      "question": "When is a retry sound?",
+      "choices": [
+        "After checking that the intent remains valid on the new state",
+        "Whenever an exception occurs",
+        "Only if the previous writer’s change is discarded"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "atomic-pointer",
+      "part": 4,
+      "title": "Publish one complete state",
+      "goal": "Model why file creation and table publication are separate steps.",
+      "story": "A writer can fail after writing data but before publishing its new metadata pointer.",
+      "predict": "What should a reader see before publication?",
+      "code": "# A publication model, not a second catalog implementation.\ncatalog_pointer = 'metadata-v1'\nstates = {'metadata-v1':['file-a']}\nwritten_files = {'file-a','file-b'}\nstates['metadata-v2'] = ['file-a','file-b']\nbefore = list(states[catalog_pointer])\n# Successful atomic compare-and-swap against the expected pointer.\nexpected = 'metadata-v1'\nif catalog_pointer == expected:\n    catalog_pointer = 'metadata-v2'\nafter = list(states[catalog_pointer])\nshow({'before_publish':before,'after_publish':after,'written_files':sorted(written_files)})",
+      "check": "assert before == ['file-a']\nassert after == ['file-a','file-b']",
+      "worked": "Before publication, readers use the old complete state. After publication, they use the new complete state. Writing a file alone does not commit it. Real catalogs implement atomic publication and requirements through their own mechanisms.",
+      "change": "Change expected to metadata-v0 to model a failed compare-and-swap.",
+      "question": "What makes an uncommitted new file visible?",
+      "choices": [
+        "Publishing a metadata state that references it",
+        "Its upload finishing",
+        "Its name sorting last"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Commit model",
+      "minutes": 5
+    },
+    {
+      "id": "tags",
+      "part": 4,
+      "title": "Pin a reproducible report",
+      "goal": "Create a real tag referencing a known snapshot.",
+      "story": "A financial report needs an explicit reference to its input state as ingestion continues.",
+      "predict": "Will appending move a snapshot tag automatically?",
+      "code": "pinned = table.current_snapshot().snapshot_id\nwith table.manage_snapshots() as manager:\n    manager.create_tag(pinned,'report-close')\nappend(3)\nref = table.metadata.refs['report-close']\nshow({'tag_snapshot':str(ref.snapshot_id),\n      'current_snapshot':str(table.current_snapshot().snapshot_id),\n      'pinned_rows':table.scan(snapshot_id=ref.snapshot_id).count()})",
+      "check": "assert ref.snapshot_id == pinned\nassert table.current_snapshot().snapshot_id != pinned\nassert table.scan(snapshot_id=ref.snapshot_id).count() == 120",
+      "worked": "The tag remains on its original snapshot while main advances. A tag supports naming a reproducible state; its retention settings and referenced files still matter.",
+      "change": "List table.metadata.refs and compare main with report-close.",
+      "question": "What does a tag do here?",
+      "choices": [
+        "Names a fixed snapshot",
+        "Copies every data file into a new table",
+        "Automatically follows the newest append"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "delete-tradeoff",
+      "part": 4,
+      "title": "Compare delete strategies",
+      "goal": "Model the read/write tradeoff of copy-on-write and merge-on-read.",
+      "story": "A workload changes a small fraction of rows in large files. Different engines and table versions support different delete mechanisms.",
+      "predict": "Which strategy shifts more work into subsequent reads?",
+      "code": "# Illustrative byte model, not a measured delete-file benchmark.\naffected_file_bytes = 128 * 1024 * 1024\ndelete_bytes = 64 * 1024\nreads_before_rewrite = 20\ncosts = {\n    'copy_on_write_write_bytes':affected_file_bytes,\n    'merge_on_read_delete_write_bytes':delete_bytes,\n    'merge_on_read_extra_delete_read_bytes':delete_bytes*reads_before_rewrite\n}\nshow(costs)",
+      "check": "assert costs['copy_on_write_write_bytes'] > costs['merge_on_read_delete_write_bytes']\nassert costs['merge_on_read_extra_delete_read_bytes'] > 0",
+      "worked": "The model gives merge-on-read a smaller immediate write but repeated delete-reading work. It omits lookup, CPU, caching and compaction. The runnable writer lessons use copy-on-write; this lesson does not generate delete files.",
+      "change": "Raise reads_before_rewrite. Explain why bytes alone do not establish a latency winner.",
+      "question": "Which must be verified before choosing a delete strategy?",
+      "choices": [
+        "Writer and reader support plus workload costs",
+        "Only the format’s feature list",
+        "Only the smallest immediate write"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Cost model",
+      "minutes": 5
+    },
+    {
+      "id": "compatibility",
+      "part": 4,
+      "title": "Check the reader contract",
+      "goal": "Separate table-format features from implementation support.",
+      "story": "A table is valid Iceberg but a downstream reader cannot handle its delete mechanism.",
+      "predict": "Is format-version support alone enough to establish compatibility?",
+      "code": "# Explicit illustrative engine capability declarations.\nrequired = {'format-v2','position-deletes'}\nreaders = {'reader_a':{'format-v2','position-deletes','equality-deletes'},\n           'reader_b':{'format-v2'}}\nmissing = {name:sorted(required-capabilities) for name,capabilities in readers.items()}\nshow(missing)",
+      "check": "assert missing['reader_a'] == []\nassert missing['reader_b'] == ['position-deletes']",
+      "worked": "The second reader lacks a required feature despite supporting v2. Production validation should test actual files and operations across pinned engines, catalogs and storage integrations. These names are illustrative, not vendor claims.",
+      "change": "Add a required transform and compare the capability sets.",
+      "question": "What is the strongest compatibility evidence?",
+      "choices": [
+        "A representative table read and operation test on pinned versions",
+        "A shared product category",
+        "A matching file extension"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Compatibility model",
+      "minutes": 5
+    },
+    {
+      "id": "discovery-access",
+      "part": 5,
+      "title": "Discovery is not file access",
+      "goal": "Find an access path that bypasses catalog discovery.",
+      "story": "An analyst cannot list a table but still has a storage URL and permission to read it.",
+      "predict": "Does hiding a table name prevent a direct file read?",
+      "code": "# Policy model only. Browser code cannot enforce a trusted security boundary.\npermissions = {'list_catalog':False,'read_object':True}\ncan_discover = permissions['list_catalog']\ncan_read_known_path = permissions['read_object']\nshow({'can_discover':can_discover,'can_read_known_path':can_read_known_path})",
+      "check": "assert not can_discover and can_read_known_path",
+      "worked": "Catalog discovery is denied while direct object access is allowed. Production protection must account for storage permissions and credentials as well as catalog and engine policy.",
+      "change": "Revoke read_object and trace which paths remain available.",
+      "question": "Where must a direct-file bypass be addressed?",
+      "choices": [
+        "At the storage and credential boundary",
+        "Only in the navigation menu",
+        "Only by renaming the table"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Governance model",
+      "minutes": 5
+    },
+    {
+      "id": "row-policy",
+      "part": 5,
+      "title": "Test a row policy boundary",
+      "goal": "Compare governed output with direct access to the same source.",
+      "story": "An EU analyst should see EU orders. Filtering a query demonstrates a policy’s intended result, not its enforcement.",
+      "predict": "Will an application-side filter protect the underlying file?",
+      "code": "# A policy model over real data; not trusted enforcement.\nall_rows = table.scan().to_arrow().to_pylist()\ngoverned = [row for row in all_rows if row['region'] == 'EU']\nshow({'governed_rows':len(governed),'direct_source_rows':len(all_rows)})",
+      "check": "assert len(governed) == 60\nassert len(all_rows) == 120",
+      "worked": "The filtered view returns 60 rows; direct source access returns 120. Real row-level policies require a trusted enforcement path and controls on bypass access. The browser is deliberately open to inspection.",
+      "change": "Apply a column projection and explain why omitting amount from the UI does not revoke access to it.",
+      "question": "What does the filter establish?",
+      "choices": [
+        "The intended subset, not a trusted authorization boundary",
+        "That the raw data cannot be read",
+        "That every engine enforces the rule"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Governance model",
+      "minutes": 5
+    },
+    {
+      "id": "metadata-leak",
+      "part": 5,
+      "title": "Inspect metadata exposure",
+      "goal": "Locate information revealed before scanning data rows.",
+      "story": "A user cannot query the data but can download the metadata files.",
+      "predict": "Can metadata reveal schema names and counts?",
+      "code": "schema_names = table.schema().column_names\nmanifest = table.current_snapshot().manifests(table.io)[0]\nentry = manifest.fetch_manifest_entry(table.io)[0]\nshow({'schema_names':schema_names,'file_path':entry.data_file.file_path,\n      'record_count':entry.data_file.record_count,\n      'lower_bounds_present':bool(entry.data_file.lower_bounds)})",
+      "check": "assert 'amount' in schema_names\nassert entry.data_file.record_count == 40\nassert entry.data_file.lower_bounds",
+      "worked": "Real manifests expose paths, counts and encoded bounds; metadata JSON exposes schema and references. These can reveal business information, so metadata access deserves an explicit policy too.",
+      "change": "Print upper_bounds and explain why the encoded bytes require the field’s type to interpret.",
+      "question": "What should a data access review include?",
+      "choices": [
+        "Metadata and statistics as well as data files",
+        "Only SQL result tables",
+        "Only catalog descriptions"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "audit",
+      "part": 5,
+      "title": "Make a query reproducible",
+      "goal": "Capture an evidence record for a report.",
+      "story": "Audit needs to know which data state produced a result, not just when someone clicked Run.",
+      "predict": "Is a table name alone enough to replay the report later?",
+      "code": "snapshot = table.current_snapshot().snapshot_id\nquery = 'SELECT region, count(*) AS n FROM orders GROUP BY region ORDER BY region'\nresult = sql(query, snapshot)\nrecord = {'table':'shop.orders','snapshot_id':str(snapshot),\n          'metadata_location':table.metadata_location,'schema_id':table.schema().schema_id,\n          'query':query,'result':result,'pyiceberg_version':__import__('pyiceberg').__version__}\nshow(record)",
+      "check": "assert record['snapshot_id'] == str(snapshot)\nassert sum(r['n'] for r in record['result']) == 120",
+      "worked": "The record binds the query to a snapshot, schema, metadata location and library version. It is useful evidence, but this local printout is not a tamper-resistant audit service. Real records also need identity, policy context and appropriate result handling.",
+      "change": "Append another batch, then replay the recorded snapshot query.",
+      "question": "What still threatens future replay?",
+      "choices": [
+        "Expiring the snapshot or losing its referenced files",
+        "Adding newer snapshots by itself",
+        "Using an explicit snapshot ID"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "erasure",
+      "part": 5,
+      "title": "Trace an erasure obligation",
+      "goal": "Identify remaining copies after a logical delete.",
+      "story": "A deletion request covers all copies under the organization’s policy, including retained history and exports.",
+      "predict": "Which obligations can a current-table DELETE settle on its own?",
+      "code": "# Evidence inventory model; no compliance guarantee is implied.\ncopies = {'current_table':False,'retained_snapshot':True,\n          'object_version':True,'export':True,'backup':True}\nremaining = [name for name,contains_personal_data in copies.items() if contains_personal_data]\nshow({'remaining_locations':remaining,'complete':not remaining})",
+      "check": "assert 'retained_snapshot' in remaining\nassert len(remaining) == 4",
+      "worked": "Four locations still contain the data in this scenario. Retention policy, legal holds, backup treatment and deletion evidence must be resolved explicitly. Removing a snapshot reference does not prove physical erasure.",
+      "change": "Mark one copy as removed and check which obligations remain.",
+      "question": "What is the right completion evidence?",
+      "choices": [
+        "Verified treatment of all in-scope copies under the retention policy",
+        "A zero count in the latest snapshot alone",
+        "A successful DROP COLUMN alone"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Governance model",
+      "minutes": 5
+    },
+    {
+      "id": "retention-policy",
+      "part": 5,
+      "title": "Resolve retention before cleanup",
+      "goal": "Calculate which historical states must be preserved.",
+      "story": "A storage reduction job proposes expiring old snapshots. A reporting tag and a legal hold protect two of them.",
+      "predict": "Can an age cutoff override a protected reference?",
+      "code": "# A policy decision model, not the production expiration implementation.\nsnapshots = [{'id':'s1','age_days':90},{'id':'s2','age_days':40},{'id':'s3','age_days':1}]\nprotected = {'s1':'legal hold','s2':'report tag'}\ncutoff_days = 30\neligible = [s['id'] for s in snapshots if s['age_days'] > cutoff_days and s['id'] not in protected]\nshow({'protected':protected,'eligible':eligible})",
+      "check": "assert eligible == []",
+      "worked": "No snapshot is eligible in this policy model. Age is only one condition. Production jobs must honor actual catalog references and configured retention semantics; legal holds are organizational controls, not an automatic Iceberg property.",
+      "change": "Remove the report tag from protected. Explain why file cleanup still needs reference analysis.",
+      "question": "What must be settled before destructive maintenance?",
+      "choices": [
+        "Retention requirements and protected references",
+        "Only the oldest timestamp",
+        "Only the largest file"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Governance model",
+      "minutes": 5
+    },
+    {
+      "id": "workload",
+      "part": 6,
+      "title": "Choose a layout for two queries",
+      "goal": "Compare competing predicates on the same physical layout.",
+      "story": "Your workload mixes region reports and order lookups. A layout should be evaluated against both.",
+      "predict": "Does the region layout prune equally well for both predicates?",
+      "code": "region_query = metrics(\"region = 'EU'\")\nid_query = metrics('order_id = 1005')\nshow({'region_query':region_query,'id_query':id_query})",
+      "check": "assert region_query['selected_files'] == 3\nassert id_query['selected_files'] == 2",
+      "worked": "The EU filter keeps three 20-row files. Bounds for order ID 1005 keep both region files from its batch because their ID ranges overlap. Always inspect actual statistics rather than assuming a partition key is the only pruning mechanism.",
+      "change": "Change the ID to 1006 and compare the result. Then try order_id >= 1000 AND order_id < 1040.",
+      "question": "What should drive layout evaluation?",
+      "choices": [
+        "A representative mix of predicates and measured candidates",
+        "One favorite query alone",
+        "The largest number of partitions possible"
+      ],
+      "answer": 0,
+      "setup": "reset(partitioned=True)",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "sort-layout",
+      "part": 6,
+      "title": "Narrow bounds with ordering",
+      "goal": "Compare file ranges for identical rows arranged differently.",
+      "story": "Two tables contain the same orders. One interleaves low and high IDs across files; the other groups adjacent IDs.",
+      "predict": "Which layout should keep fewer files for order_id = 5?",
+      "code": "rows = table.scan().to_arrow().to_pylist()\nreset(batches=0)\nfor offset in range(3):\n    batch = rows[offset::3]\n    table.append(pa.Table.from_pylist(batch,schema=table.schema().as_arrow()))\ninterleaved = metrics('order_id = 5')\nreset(batches=0)\nfor offset in range(0,120,40):\n    batch = sorted(rows,key=lambda r:r['order_id'])[offset:offset+40]\n    table.append(pa.Table.from_pylist(batch,schema=table.schema().as_arrow()))\nclustered = metrics('order_id = 5')\nshow({'interleaved':interleaved,'clustered':clustered})",
+      "check": "assert interleaved['selected_files'] == 3\nassert clustered['selected_files'] == 1\nassert table.scan().count() == 120",
+      "worked": "The interleaved files have overlapping ID ranges; grouping adjacent IDs narrows those ranges. Both contain identical rows and have three files. This lesson arranges writes explicitly; it does not declare or verify an Iceberg sort-order contract.",
+      "change": "Try a wide range predicate and compare how much of the advantage remains.",
+      "question": "Why did grouping adjacent IDs help?",
+      "choices": [
+        "It made file bounds more selective",
+        "It created a primary-key index",
+        "It changed the logical result"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "cost-budget",
+      "part": 6,
+      "title": "Estimate request overhead",
+      "goal": "Keep a cost model separate from measured browser execution.",
+      "story": "Even a small amount of data can cost time when it requires many serial requests.",
+      "predict": "What happens if the same bytes are spread over many more files?",
+      "code": "# Simplified serial-request estimate. Not measured cloud latency.\nrequest_ms = 20\nthroughput_bytes_per_ms = 100_000\nbytes_to_read = 12_000_000\nestimates = {str(count):count*request_ms + bytes_to_read/throughput_bytes_per_ms\n             for count in [3,30,300]}\nshow({'estimated_ms_by_file_count':estimates})",
+      "check": "assert estimates['300'] > estimates['30'] > estimates['3']",
+      "worked": "This serial model makes request overhead dominate as file count grows. Real clients overlap requests, cache metadata and read ranges; object storage and engine behavior must be measured. These numbers are assumptions, not WASM measurements.",
+      "change": "Add a concurrency assumption and explain where dividing by concurrency becomes too optimistic.",
+      "question": "How should the estimate be reported?",
+      "choices": [
+        "With its assumptions and a separate measured result",
+        "As a production latency guarantee",
+        "As elapsed browser time"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Cost model",
+      "minutes": 5
+    },
+    {
+      "id": "benchmark",
+      "part": 6,
+      "title": "Hold the answer constant",
+      "goal": "Validate correctness before comparing physical work.",
+      "story": "A rewrite reports fewer files. You must prove that it still answers the business query correctly.",
+      "predict": "Is an equal row count enough to establish equal grouped totals?",
+      "code": "query = 'SELECT region, count(*) AS n, sum(amount) AS total FROM orders GROUP BY region ORDER BY region'\nbefore = sql(query)\nwork_before = metrics()\ntable.overwrite(table.scan().to_arrow())\nafter = sql(query)\nwork_after = metrics()\nshow({'same_answer':before == after,'before':work_before,'after':work_after,'answer':after})",
+      "check": "assert before == after\nassert work_after['selected_files'] < work_before['selected_files']",
+      "worked": "The grouped counts and totals match while live file count falls from three to one. Correctness comes first. This fixture has exact integer-valued amounts in float columns; arbitrary floating-point workloads need appropriate comparison tolerances.",
+      "change": "Add min(order_id) and max(order_id) to strengthen the answer check.",
+      "question": "Which comparison is valid?",
+      "choices": [
+        "Equivalent results, controlled data, and explicitly defined work metrics",
+        "The fastest single run regardless of its answer",
+        "Different queries on different datasets"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "incident",
+      "part": 6,
+      "title": "Repair a fragmented workload",
+      "goal": "Combine a rewrite, selective layout and correctness evidence.",
+      "story": "Twelve tiny commits feed a region dashboard. Your task is to reduce live files while preserving the table’s rows.",
+      "predict": "How many files would remain after one full rewrite of this unpartitioned table?",
+      "code": "before = metrics()\nanswer_before = sql('SELECT region, count(*) AS n, sum(amount) AS total FROM orders GROUP BY region ORDER BY region')\ntable.overwrite(table.scan().to_arrow())\nafter = metrics()\nanswer_after = sql('SELECT region, count(*) AS n, sum(amount) AS total FROM orders GROUP BY region ORDER BY region')\nshow({'before':before,'after':after,'same_answer':answer_before == answer_after})",
+      "check": "assert answer_before == answer_after\nassert before['selected_files'] == 12\nassert after['selected_files'] == 1",
+      "worked": "The rewrite consolidates twelve files into one and preserves the grouped answer. The original files remain for retained history. A production recommendation must also budget rewrite resources, ingestion contention and retention.",
+      "change": "Add identity(region) before the rewrite. Predict two live files and compare EU candidate records. The check expects one file, so explain why your valid experiment changes that target.",
+      "question": "What remains after this repair?",
+      "choices": [
+        "Historical files and maintenance obligations",
+        "Proof of production throughput",
+        "Automatic organization-wide erasure"
+      ],
+      "answer": 0,
+      "setup": "reset(batches=12)",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    },
+    {
+      "id": "recommendation",
+      "part": 6,
+      "title": "Write a defensible recommendation",
+      "goal": "Assemble a compact evidence record and state its limits.",
+      "story": "The final deliverable is an engineering decision someone else can inspect and challenge.",
+      "predict": "Which claims can this small local experiment support?",
+      "code": "baseline = metrics(\"region = 'EU'\")\nanswer = sql(\"SELECT count(*) AS n FROM orders WHERE region = 'EU'\")\nrecord = {\n    'workload':'EU region dashboard',\n    'observed':{'answer':answer,'plan':baseline},\n    'decision':'Evaluate region partitioning against the full workload',\n    'risks':['more files','rewrite cost','retained history','reader compatibility'],\n    'next_measurement':'Representative object-store request and scan traces',\n    'limits':'Browser-local fixture; no distributed throughput or trusted policy enforcement'\n}\nshow(record)",
+      "check": "assert record['observed']['answer'][0]['n'] == 60\nassert record['risks'] and record['limits'] and record['next_measurement']",
+      "worked": "A defensible recommendation connects an observed workload and result to a conditional decision, risks, and the next measurement. Use Export warehouse to retain the real files from an experiment; save the evidence output separately with your query.",
+      "change": "Replace the decision with your own, citing the preceding experiments. Include the retention and access controls needed for deployment.",
+      "question": "Which claim follows directly from these lessons?",
+      "choices": [
+        "Measured file selection and table behavior on the pinned local fixture",
+        "A guaranteed production speedup",
+        "A verified enterprise security boundary"
+      ],
+      "answer": 0,
+      "setup": "reset()",
+      "kind": "Real Iceberg",
+      "minutes": 5
+    }
+  ],
+  "parts": [
+    [
+      "01",
+      "Find the table",
+      "Follow the metadata to real files."
+    ],
+    [
+      "02",
+      "Change without losing identity",
+      "Snapshots, history and schema evolution."
+    ],
+    [
+      "03",
+      "Read less",
+      "Choose layouts and inspect pruning."
+    ],
+    [
+      "04",
+      "Maintain the warehouse",
+      "Small files, deletes and retained history."
+    ],
+    [
+      "05",
+      "Commit safely",
+      "Concurrency, references and compatibility."
+    ],
+    [
+      "06",
+      "Govern the whole path",
+      "Access, audit and deletion boundaries."
+    ],
+    [
+      "07",
+      "Design with evidence",
+      "Workload tradeoffs and a final investigation."
+    ]
+  ],
+  "support": {
+    "catalog": {
+      "concept": "A table name is an address, not a container of rows. The catalog’s pointer tells a reader which metadata version is current.",
+      "hint": "Start with zero batches. Compare the metadata path with the number of data files.",
+      "notice": "Look for a metadata file alongside zero rows and zero data files."
+    },
+    "membership": {
+      "concept": "Iceberg decides membership from committed references. Listing a folder answers a different question: which files physically exist?",
+      "hint": "Compare the count immediately before and after writing the extra file.",
+      "notice": "The physical file exists, but the committed count is unchanged."
+    },
+    "metadata": {
+      "concept": "Metadata JSON is the table’s map. Identifiers select the current schema, partition spec and snapshot from the definitions recorded there.",
+      "hint": "Compare current-snapshot-id with the IDs in snapshots.",
+      "notice": "Distinguish a current identifier from the list of historical definitions."
+    },
+    "manifest-list": {
+      "concept": "A manifest list adds a level of indirection: one snapshot can refer to many manifests without listing every data file in its metadata JSON.",
+      "hint": "Follow snapshot.manifest_list, then inspect manifest_path in its entries.",
+      "notice": "The Avro entries point to more Avro files, not order rows."
+    },
+    "manifest": {
+      "concept": "A manifest describes files and their metrics. A planner can use these descriptions before opening the data itself.",
+      "hint": "Sum record_count for the live entries in this append-only fixture.",
+      "notice": "Check both the three paths and their combined record count."
+    },
+    "parquet-ids": {
+      "concept": "A field ID identifies a logical column across name changes. Parquet stores that ID with the physical column.",
+      "hint": "Inspect field.metadata, not just field.name.",
+      "notice": "Match each PARQUET:field_id with the table schema."
+    },
+    "snapshots": {
+      "concept": "A snapshot is a complete logical state, assembled from file references. Parent links describe how states relate without copying all the data.",
+      "hint": "Read the IDs as strings and follow each parent to the previous entry.",
+      "notice": "Check ancestry separately from the visible row count."
+    },
+    "time-travel": {
+      "concept": "Time travel selects the input state before the query runs. The same SQL can therefore answer questions about different table versions.",
+      "hint": "Use the first snapshot ID as the second argument to sql.",
+      "notice": "Compare counts for the first state and the current state."
+    },
+    "immutable": {
+      "concept": "An append adds new data and publishes new metadata. Existing immutable files can be reused in both the old and new states.",
+      "hint": "Use set intersection to find reused paths and set difference to find additions.",
+      "notice": "Do not infer a rewrite just because a new snapshot exists."
+    },
+    "rename": {
+      "concept": "A rename changes a label while preserving identity. Iceberg resolves stored columns by field ID, so the physical names need not be rewritten.",
+      "hint": "Compare old_id and new_id, then compare the file-path sets.",
+      "notice": "You need both stable identity and successful reads under the new name."
+    },
+    "add-column": {
+      "concept": "An optional field can be absent from older files. For this new field, those old rows resolve to null rather than a backfilled business value.",
+      "hint": "COUNT(*) counts rows; COUNT(priority) counts non-null priority values.",
+      "notice": "Compare the two counts instead of relying on a sample row."
+    },
+    "readd": {
+      "concept": "Dropping a field retires its identity. A new field with the same spelling must receive a different ID, or unrelated historical values could be confused.",
+      "hint": "Compare the IDs before and after, then count non-null replacement values.",
+      "notice": "A matching name and type do not establish identity."
+    },
+    "baseline": {
+      "concept": "A result describes what a query returns. A scan plan describes candidate work; these are different quantities.",
+      "hint": "Compare the baseline candidate count with the single-row SQL result.",
+      "notice": "The helper materializes Iceberg data before SQL WHERE runs."
+    },
+    "bounds": {
+      "concept": "Bounds are exclusion evidence. If a value cannot lie within a file’s range, the planner can safely skip that file.",
+      "hint": "Identify which batch range contains 1005. Then inspect selected_files.",
+      "notice": "Separate selected files, candidate records and matching rows."
+    },
+    "residual": {
+      "concept": "Pruning is conservative: a retained file may match. A residual filter still decides which individual rows actually qualify.",
+      "hint": "Every file in this fixture contains both EU and US.",
+      "notice": "Compare candidate_records with matched_rows."
+    },
+    "identity-partition": {
+      "concept": "Identity partitioning groups rows by an unchanged source value. That can reduce work for one predicate while increasing the number of files.",
+      "hint": "There are two region files per batch. Count only the EU files.",
+      "notice": "Check both file growth and candidate-record reduction."
+    },
+    "partition-evolution": {
+      "concept": "Partition evolution changes how future files are organized. Every existing file keeps the specification that wrote it.",
+      "hint": "Separate the three old files from the two new region files.",
+      "notice": "For EU, add all old candidate rows to only the new EU rows."
+    },
+    "hidden-transforms": {
+      "concept": "A day transform groups many timestamps under one value. Projecting a timestamp filter onto days gives a coarse candidate set.",
+      "hint": "The end of the interval is exclusive. Consider what changes at exactly midnight.",
+      "notice": "Candidate days do not remove the need for the timestamp filter."
+    },
+    "small-files": {
+      "concept": "Every commit has fixed work as well as per-row work. Tiny batches multiply files and metadata operations even when the row count is small.",
+      "hint": "Compare files and snapshots while keeping the total number of rows equal.",
+      "notice": "This experiment compares overhead, not identical row values or cloud throughput."
+    },
+    "compact": {
+      "concept": "Consolidation changes physical layout while preserving logical contents. Historical states may still reference the files it replaces.",
+      "hint": "Compare complete sorted row sets, then live files and physical existence.",
+      "notice": "Fewer current files does not imply less retained storage."
+    },
+    "delete": {
+      "concept": "Copy-on-write replaces data files affected by a row change. Unaffected files can remain referenced without being rewritten.",
+      "hint": "Compare before and after path sets to find reuse and replacement.",
+      "notice": "Count reused files, new files and visible rows separately."
+    },
+    "deleted-history": {
+      "concept": "A delete changes the current state. It does not retroactively change an older immutable state that is still retained.",
+      "hint": "Save the snapshot ID before deleting, then query both states.",
+      "notice": "A zero current count and nonzero historical count can both be correct."
+    },
+    "expire": {
+      "concept": "Expiration removes eligible history from the current metadata. Physical cleanup has its own implementation and reference-safety requirements.",
+      "hint": "Count retained snapshots and physical Parquet files independently.",
+      "notice": "This runtime removes the reference without deleting physical files."
+    },
+    "orphans": {
+      "concept": "A file absent from the current state can still be essential to a retained historical state. Cleanup needs the whole relevant reference graph.",
+      "hint": "Union the paths from every retained snapshot before subtracting current paths.",
+      "notice": "Historical-only is a reference category, not proof of garbage."
+    },
+    "stale-commit": {
+      "concept": "Optimistic commits validate assumptions at publication time. Two writers starting from one schema cannot both assume it is still current after one succeeds.",
+      "hint": "Prepare both changes before committing either of them.",
+      "notice": "Look for a real CommitFailedException and only the winning column."
+    },
+    "retry": {
+      "concept": "A sound retry reapplies intent to fresh state. It preserves compatible changes instead of overwriting another writer’s work.",
+      "hint": "Reload the table after writer A commits, then add the independent field.",
+      "notice": "Check that both fields survive with distinct IDs."
+    },
+    "atomic-pointer": {
+      "concept": "Publication separates preparation from visibility. A reader should resolve one complete committed state, even if more files already exist.",
+      "hint": "Track catalog_pointer rather than written_files.",
+      "notice": "Compare visibility before and after the pointer changes."
+    },
+    "tags": {
+      "concept": "A tag gives a stable name to a snapshot. Main may advance while that reference continues to select an earlier state.",
+      "hint": "Record the tag’s snapshot ID before appending.",
+      "notice": "Compare the tag ID, current ID and tagged row count."
+    },
+    "delete-tradeoff": {
+      "concept": "Delete strategies distribute work differently across writes and reads. A small immediate write can create repeated work later.",
+      "hint": "Change the number of subsequent reads while holding the affected data size constant.",
+      "notice": "The byte calculation is illustrative; it is not a latency benchmark."
+    },
+    "compatibility": {
+      "concept": "A format specification defines possibilities. Each engine implements a subset that must cover the actual features your table uses.",
+      "hint": "Subtract each reader’s capabilities from the required set.",
+      "notice": "A missing required feature matters even when the format version matches."
+    },
+    "discovery-access": {
+      "concept": "Discovery and access are separate permissions. A user who knows a path may bypass catalog discovery if storage access is still allowed.",
+      "hint": "Evaluate the known-path permission independently from list_catalog.",
+      "notice": "Hiding a name does not revoke a storage credential."
+    },
+    "row-policy": {
+      "concept": "A filter can demonstrate an intended policy result. Enforcement additionally requires a trusted path that users cannot bypass.",
+      "hint": "Compare the governed list with the unfiltered source list.",
+      "notice": "The difference demonstrates an access path, not a security guarantee."
+    },
+    "metadata-leak": {
+      "concept": "Metadata is data about data. Paths, names, counts and bounds may reveal information even without access to result rows.",
+      "hint": "Inspect the manifest entry before calling any row-reading helper.",
+      "notice": "Identify which information came from metadata rather than data rows."
+    },
+    "audit": {
+      "concept": "Reproducibility binds a query to an input state and execution context. A mutable table name alone cannot specify those inputs later.",
+      "hint": "Record the snapshot, schema, query and library version together.",
+      "notice": "Retaining a record does not itself retain the referenced files."
+    },
+    "erasure": {
+      "concept": "Erasure is a process across in-scope copies. Logical deletion from one state leaves other locations to examine and handle.",
+      "hint": "Read the inventory as separate obligations, not one success flag.",
+      "notice": "A latest-state query cannot prove the status of a backup or export."
+    },
+    "retention-policy": {
+      "concept": "Retention combines age with protected references and organizational obligations. A cutoff alone cannot decide what may be removed.",
+      "hint": "Check protected before considering a snapshot eligible.",
+      "notice": "A legal hold is an organizational control, not an automatic Iceberg feature."
+    },
+    "workload": {
+      "concept": "A useful layout serves a workload, not a single query. File statistics can prune data even when the predicate is not the partition key.",
+      "hint": "Compare region and ID predicates on the same table.",
+      "notice": "Inspect actual selected files instead of predicting solely from directory names."
+    },
+    "sort-layout": {
+      "concept": "Ordering nearby values together narrows file ranges. Narrower ranges can make metadata pruning more selective without changing the rows.",
+      "hint": "Keep identical rows and file counts while changing how IDs are grouped.",
+      "notice": "Overlapping ranges keep more candidate files for a point lookup."
+    },
+    "cost-budget": {
+      "concept": "A cost model makes assumptions explicit so you can challenge them. Request count and bytes are different cost drivers.",
+      "hint": "Hold bytes constant and vary only file count.",
+      "notice": "Serial requests are an assumption; real clients may overlap or cache work."
+    },
+    "benchmark": {
+      "concept": "Optimization must preserve the answer. Equal counts alone can hide changed values, so compare the business aggregates too.",
+      "hint": "Capture the grouped result before rewriting and compare it afterward.",
+      "notice": "Separate logical equivalence from a reduction in physical work."
+    },
+    "incident": {
+      "concept": "An incident repair needs a correctness argument as well as a performance argument. Reducing current fragmentation leaves retention work to consider.",
+      "hint": "Record grouped totals before changing the layout.",
+      "notice": "Prove the answer survives and identify what remains unresolved."
+    },
+    "recommendation": {
+      "concept": "A recommendation joins evidence to a conditional decision. State the scope of observation and the next measurement that could overturn your conclusion.",
+      "hint": "Include risks and a next measurement alongside your observed plan.",
+      "notice": "Local file-selection evidence cannot guarantee a production speedup."
+    }
+  },
+  "sectionReviews": [
+    [
+      "Trace an unfamiliar table",
+      "A job leaves 20 new files in a directory, but readers see no new rows. Explain the lookup path you would inspect before retrying the job.",
+      [
+        "Name the catalog pointer, metadata, snapshot, manifest list and manifests.",
+        "Distinguish a physical file from a committed member.",
+        "Say what evidence would establish a successful commit."
+      ]
+    ],
+    [
+      "Explain a schema incident",
+      "A column was dropped and re-added with the same name. A report now sees nulls. Explain why a rename would have behaved differently.",
+      [
+        "Use field IDs, not just names.",
+        "Explain the missing-field result for older files.",
+        "Identify a retained state that could help investigate."
+      ]
+    ],
+    [
+      "Choose a pruning experiment",
+      "A new partition spec is deployed, but old queries remain expensive. Propose a comparison that distinguishes old-layout work from new-layout work.",
+      [
+        "Account for each file’s own specification.",
+        "Compare candidate records with matching rows.",
+        "Keep results and workload constant when comparing layouts."
+      ]
+    ],
+    [
+      "Review a cleanup proposal",
+      "An operator proposes deleting every file absent from the current snapshot. Write the reason to pause and the evidence needed before cleanup.",
+      [
+        "Consider every retained snapshot and reference.",
+        "Separate metadata expiration from physical deletion.",
+        "Include in-flight writes and a safe age window."
+      ]
+    ],
+    [
+      "Resolve a failed commit",
+      "A schema update fails after a second writer commits. Explain when to reload and retry, and when the operation needs a new decision.",
+      [
+        "Identify the stale assumption.",
+        "Preserve compatible changes from the other writer.",
+        "Verify reader support and references before deploying new features."
+      ]
+    ],
+    [
+      "Challenge an access policy",
+      "An analyst cannot discover a table but can read its files. A deleted row also remains in a report export. Propose controls for both paths.",
+      [
+        "Separate catalog, engine and storage enforcement.",
+        "Include metadata exposure and credential scope.",
+        "Account for retained history, exports and deletion evidence."
+      ]
+    ],
+    [
+      "Defend a design",
+      "Recommend a layout and maintenance policy for frequent small writes, region dashboards and occasional point lookups. State what this lab proves and what production testing must still establish.",
+      [
+        "Compare at least two predicates and validate answers.",
+        "Budget file overhead, rewrites and retained history.",
+        "Include compatibility, access controls and a falsifiable next measurement."
+      ]
+    ]
+  ],
+  "sectionOpeners": [
+    {
+      "title": "Why start here?",
+      "paragraphs": [
+        "Suppose your sales data lives in Parquet files. A file tells you what is inside it, but a folder listing cannot reliably tell you which files form the current table. What if a writer has uploaded new files but has not finished its change? Which version should a dashboard read?",
+        "Apache Iceberg is a table format: it adds metadata that describes table states and the files belonging to them. This lets readers use a complete, published table state while writers prepare changes. To understand the performance, safe updates and governance decisions later in this course, we first need to follow how a query finds that state.",
+        "The first step is the catalog, which maps a table name to its current metadata location. We begin with an empty table to make one distinction visible: a table can already have a name, schema (its columns and types) and metadata before it contains any data files."
+      ]
+    },
+    {
+      "title": "Why learn how tables change?",
+      "paragraphs": [
+        "Ingestion keeps running while reports need consistent inputs. Column names also change as applications evolve. Rewriting everything for every change would be costly, and confusing old and new columns could silently change a result.",
+        "This section follows snapshots and field IDs: the mechanisms that let Iceberg retain earlier states, reuse files and preserve column identity. Start with the snapshot history so you can explain which state a later query is reading."
+      ]
+    },
+    {
+      "title": "Why measure what gets read?",
+      "paragraphs": [
+        "A query can return one row after considering millions. A small result alone therefore cannot tell you whether a layout is efficient.",
+        "This section connects your predicates to the files Iceberg selects. Establish a baseline first, then investigate how bounds and partitioning reduce candidate work. That distinction will help you evaluate a layout using evidence rather than its directory names."
+      ]
+    },
+    {
+      "title": "Why does a correct table need maintenance?",
+      "paragraphs": [
+        "A pipeline can produce correct answers while accumulating tiny files and retained history. Queries may do more work, and storage may keep growing even after rows are deleted.",
+        "This section separates the current logical table from its physical and historical files. Begin with tiny batches to see how ingestion choices create the maintenance work you will later need to budget and perform safely."
+      ]
+    },
+    {
+      "title": "Why study failed commits?",
+      "paragraphs": [
+        "A production table often has more than one writer. Two jobs may each prepare a valid change using the same starting state, but the first successful commit can invalidate the second job’s assumptions.",
+        "This section examines publication, conflict validation and retries. Begin by deliberately causing a stale schema commit to fail, so you can distinguish protection against lost changes from an error that should simply be retried."
+      ]
+    },
+    {
+      "title": "Why look beyond the query interface?",
+      "paragraphs": [
+        "A table may be hidden in a catalog yet readable through a storage path. A deleted row may disappear from today’s report while remaining in a retained snapshot or export.",
+        "This section traces those separate access and retention paths. Begin with discovery versus file access: understanding that boundary helps you choose where controls must actually be enforced."
+      ]
+    },
+    {
+      "title": "Why does a design need an evidence trail?",
+      "paragraphs": [
+        "A layout that helps one dashboard may create more files or do little for another query. A convincing design must balance the workload, write costs, correctness, retention and access requirements.",
+        "This section brings those tradeoffs together. Start by comparing two predicates on the same table, then build a recommendation that states what you observed, what it supports and what still needs production measurement."
+      ]
+    }
+  ],
+  "paths": [
+    {
+      "title": "Understand the format",
+      "desc": "Follow a table from its name to its bytes, then change its schema.",
+      "parts": [
+        0,
+        1
+      ],
+      "start": "catalog",
+      "time": "12 lessons"
+    },
+    {
+      "title": "Design for a workload",
+      "desc": "Measure pruning, repair fragmentation and defend a layout.",
+      "parts": [
+        2,
+        3,
+        6
+      ],
+      "start": "baseline",
+      "time": "18 lessons"
+    },
+    {
+      "title": "Operate with confidence",
+      "desc": "Investigate commit conflicts, retained history and access boundaries.",
+      "parts": [
+        3,
+        4,
+        5
+      ],
+      "start": "small-files",
+      "time": "18 lessons"
+    }
+  ],
+  "visuals": {
+    "catalog": {
+      "title": "A name leads to metadata before it leads to rows",
+      "kind": "flow",
+      "rows": [
+        [
+          "Lookup",
+          [
+            "shop.orders",
+            "Catalog entry",
+            "Current metadata",
+            "Data-file references"
+          ]
+        ]
+      ],
+      "note": "An empty table already has the first three layers. Its data-file reference set is empty.",
+      "anchor": "table-metadata",
+      "question": "Which information exists before the first data file is written?"
+    },
+    "membership": {
+      "title": "Physical existence is not committed membership",
+      "kind": "compare",
+      "rows": [
+        [
+          "Committed view",
+          [
+            "Snapshot",
+            "Referenced files A, B",
+            "Visible rows"
+          ]
+        ],
+        [
+          "Warehouse",
+          [
+            "Files A, B",
+            "Uncommitted file X",
+            "X is not referenced"
+          ]
+        ]
+      ],
+      "note": "A directory can contain X without any committed table state containing it.",
+      "anchor": "overview",
+      "question": "Why must a reader follow metadata instead of treating every file in a directory as a member?"
+    },
+    "metadata": {
+      "title": "Identifiers select definitions in metadata",
+      "kind": "parallel",
+      "rows": [
+        [
+          "Metadata JSON",
+          [
+            "Current schema ID → schema",
+            "Current spec ID → partition spec",
+            "Current snapshot ID → snapshot"
+          ]
+        ]
+      ],
+      "note": "These are parallel lookups inside metadata, not three sequential data-reading operations.",
+      "anchor": "table-metadata-fields",
+      "question": "How does metadata distinguish current definitions from historical definitions?"
+    },
+    "manifest-list": {
+      "title": "One snapshot can reuse multiple manifests",
+      "kind": "flow",
+      "rows": [
+        [
+          "Lookup",
+          [
+            "Snapshot",
+            "Manifest-list Avro",
+            "Manifest A + manifest B",
+            "Data-file entries"
+          ]
+        ]
+      ],
+      "note": "The manifest list describes manifests; the manifests describe files. Neither stores the order rows.",
+      "anchor": "manifest-lists",
+      "question": "Which level lets a planner discover and summarize manifests?"
+    },
+    "manifest": {
+      "title": "File descriptions precede data reads",
+      "kind": "flow",
+      "rows": [
+        [
+          "Planner",
+          [
+            "Manifest entry",
+            "Path + count + bounds",
+            "Keep or exclude file",
+            "Read remaining data"
+          ]
+        ]
+      ],
+      "note": "In this append-only fixture, three live entries describe three 40-row files. Delete-bearing tables need additional accounting.",
+      "anchor": "manifests",
+      "question": "What can a planner learn without opening the data file?"
+    },
+    "parquet-ids": {
+      "title": "The same field ID crosses two representations",
+      "kind": "compare",
+      "rows": [
+        [
+          "Iceberg schema",
+          [
+            "ID 2",
+            "region"
+          ]
+        ],
+        [
+          "Parquet schema",
+          [
+            "PARQUET:field_id = 2",
+            "Stored column: region"
+          ]
+        ]
+      ],
+      "note": "The matching ID connects the logical field to the stored column. Column position is not its identity.",
+      "anchor": "parquet",
+      "question": "Which Parquet annotation preserves Iceberg column identity?"
+    },
+    "snapshots": {
+      "title": "Parent links connect complete states",
+      "kind": "flow",
+      "rows": [
+        [
+          "Ancestry",
+          [
+            "S1: first 40 rows",
+            "S2: 80 rows; parent S1",
+            "S3: 120 rows; parent S2"
+          ]
+        ]
+      ],
+      "note": "Each snapshot describes the complete table state at that point, not only that commit’s new rows.",
+      "anchor": "snapshots",
+      "question": "Which part of a snapshot links it to its predecessor?"
+    },
+    "time-travel": {
+      "title": "Choose a state before evaluating the query",
+      "kind": "compare",
+      "rows": [
+        [
+          "Earlier report",
+          [
+            "Select S1",
+            "Its referenced files",
+            "40 input rows"
+          ]
+        ],
+        [
+          "Current report",
+          [
+            "Select S3",
+            "Its referenced files",
+            "120 input rows"
+          ]
+        ]
+      ],
+      "note": "The same SQL can run over either state, provided its metadata and files remain available.",
+      "anchor": "point-in-time-reads-time-travel",
+      "question": "What must be retained in addition to the snapshot ID?"
+    },
+    "immutable": {
+      "title": "An append shares old immutable files",
+      "kind": "compare",
+      "rows": [
+        [
+          "Before",
+          [
+            "Current S3",
+            "Files A, B, C"
+          ]
+        ],
+        [
+          "After",
+          [
+            "Current S4",
+            "Files A, B, C + new D"
+          ]
+        ]
+      ],
+      "note": "A, B and C are reused. D and the metadata needed to publish the new state are written.",
+      "anchor": "snapshots",
+      "question": "Why does a new snapshot not require copying every data file?"
+    },
+    "rename": {
+      "title": "Rename the label, retain the identity",
+      "kind": "compare",
+      "rows": [
+        [
+          "Before",
+          [
+            "Field ID 2",
+            "Name: region"
+          ]
+        ],
+        [
+          "After",
+          [
+            "Field ID 2",
+            "Name: market"
+          ]
+        ]
+      ],
+      "note": "Existing Parquet files keep their old stored names. Iceberg resolves the unchanged ID under the current name.",
+      "anchor": "schema-evolution",
+      "question": "Why is a rename different from dropping and re-adding a field?"
+    },
+    "add-column": {
+      "title": "A new field has no stored value in old files",
+      "kind": "flow",
+      "rows": [
+        [
+          "Projection",
+          [
+            "Old file has IDs 1, 2, 3",
+            "New optional priority field",
+            "Missing ID → null"
+          ]
+        ]
+      ],
+      "note": "For this new optional field, old rows resolve to null. Schema evolution does not backfill business values.",
+      "anchor": "column-projection",
+      "question": "How should a reader project a new optional field from older files?"
+    },
+    "readd": {
+      "title": "The spelling can return without the old identity",
+      "kind": "compare",
+      "rows": [
+        [
+          "Dropped field",
+          [
+            "Name: amount",
+            "Old field ID 3"
+          ]
+        ],
+        [
+          "Replacement",
+          [
+            "Name: amount",
+            "New field ID 4",
+            "Old files lack ID 4"
+          ]
+        ]
+      ],
+      "note": "The replacement is a different field. Its spelling does not reconnect it to the retired values.",
+      "anchor": "schema-evolution",
+      "question": "What prevents a reused column name from exposing the retired field’s values?"
+    },
+    "baseline": {
+      "title": "Output size and candidate work are different",
+      "kind": "flow",
+      "rows": [
+        [
+          "SQL helper",
+          [
+            "Iceberg selects 3 files",
+            "Materialize 120 rows",
+            "DuckDB WHERE",
+            "Return 1 row"
+          ]
+        ]
+      ],
+      "note": "This helper applies SQL after materializing the Iceberg scan. The result count does not describe Iceberg pruning.",
+      "anchor": "scan-planning",
+      "question": "At which layer must the predicate be supplied to demonstrate Iceberg file pruning?"
+    },
+    "bounds": {
+      "title": "Exclude ranges that cannot contain the target",
+      "kind": "compare",
+      "rows": [
+        [
+          "Target: ID 1005",
+          [
+            "0–39: exclude",
+            "1000–1039: keep",
+            "2000–2039: exclude"
+          ]
+        ],
+        [
+          "Then",
+          [
+            "40 candidate rows",
+            "Evaluate row filter",
+            "1 matching row"
+          ]
+        ]
+      ],
+      "note": "Keeping a range proves only that the target might occur there. It does not prove every row matches.",
+      "anchor": "scan-planning",
+      "question": "Why does an inclusive file-selection test still require row filtering?"
+    },
+    "residual": {
+      "title": "May match does not mean all rows match",
+      "kind": "flow",
+      "rows": [
+        [
+          "EU predicate",
+          [
+            "3 mixed-region files",
+            "120 candidate rows",
+            "Residual filter",
+            "60 matching rows"
+          ]
+        ]
+      ],
+      "note": "Every file may contain EU rows, so no whole file can be excluded for this predicate.",
+      "anchor": "scan-planning",
+      "question": "What remains to be evaluated after a file passes a metadata pruning test?"
+    },
+    "identity-partition": {
+      "title": "Partition values separate region candidates",
+      "kind": "compare",
+      "rows": [
+        [
+          "EU query",
+          [
+            "EU file × 3 batches",
+            "60 candidate rows"
+          ]
+        ],
+        [
+          "Excluded",
+          [
+            "US file × 3 batches",
+            "No EU rows"
+          ]
+        ]
+      ],
+      "note": "Identity partitioning writes six files here. It helps this predicate while increasing file count.",
+      "anchor": "partitioning",
+      "question": "How can better pruning create more maintenance work?"
+    },
+    "partition-evolution": {
+      "title": "Each file retains the specification that wrote it",
+      "kind": "compare",
+      "rows": [
+        [
+          "Old spec 0",
+          [
+            "3 unpartitioned files",
+            "120 EU candidates"
+          ]
+        ],
+        [
+          "New spec 1",
+          [
+            "EU file: keep 20 rows",
+            "US file: exclude"
+          ]
+        ]
+      ],
+      "note": "After one new batch, the EU scan considers 140 records. Changing the spec does not reorganize old files.",
+      "anchor": "partition-evolution",
+      "question": "How does a reader interpret files written before the partition specification changed?"
+    },
+    "hidden-transforms": {
+      "title": "Project a timestamp window onto day candidates",
+      "kind": "flow",
+      "rows": [
+        [
+          "Projection",
+          [
+            "23:30 to next day 00:30",
+            "Two overlapping days",
+            "Read candidate partitions",
+            "Apply exact time filter"
+          ]
+        ]
+      ],
+      "note": "A fixed projection model. It does not claim native day-transform writes in this browser build.",
+      "anchor": "partition-transforms",
+      "question": "Why is a day-level projection coarser than the source timestamp predicate?"
+    },
+    "small-files": {
+      "title": "Small commits multiply fixed overhead",
+      "kind": "compare",
+      "rows": [
+        [
+          "Tiny batches",
+          [
+            "12 one-row appends",
+            "12 files + 12 snapshots"
+          ]
+        ],
+        [
+          "One batch",
+          [
+            "1 twelve-row append",
+            "1 file + 1 snapshot"
+          ]
+        ]
+      ],
+      "note": "The row counts match, not the row values. This compares operation overhead rather than production throughput.",
+      "anchor": "snapshots",
+      "question": "Which work grows with commit count even when the final number of rows is unchanged?"
+    },
+    "compact": {
+      "title": "Consolidation changes current references, not history",
+      "kind": "compare",
+      "rows": [
+        [
+          "Current state",
+          [
+            "Files A, B, C",
+            "Overwrite preserving rows",
+            "New consolidated file D"
+          ]
+        ],
+        [
+          "Retained history",
+          [
+            "Old snapshots",
+            "Still reference A, B, C"
+          ]
+        ]
+      ],
+      "note": "This small-table full overwrite is an experiment, not a distributed compaction implementation.",
+      "anchor": "snapshots",
+      "question": "Why can live file count fall while physical storage still contains the old files?"
+    },
+    "delete": {
+      "title": "Copy-on-write replaces the affected file",
+      "kind": "compare",
+      "rows": [
+        [
+          "Before",
+          [
+            "A contains order 0",
+            "B and C are unaffected"
+          ]
+        ],
+        [
+          "After",
+          [
+            "A replaced by A′",
+            "B and C reused",
+            "119 visible rows"
+          ]
+        ]
+      ],
+      "note": "The partial-file delete rewrites A’s surviving rows. The original A remains available to retained history.",
+      "anchor": "row-level-deletes",
+      "question": "Which files must change for a copy-on-write delete?"
+    },
+    "deleted-history": {
+      "title": "A current delete does not rewrite the past",
+      "kind": "compare",
+      "rows": [
+        [
+          "Retained snapshot",
+          [
+            "Original file",
+            "Order 0 is visible"
+          ]
+        ],
+        [
+          "Current snapshot",
+          [
+            "Rewritten file",
+            "Order 0 is absent"
+          ]
+        ]
+      ],
+      "note": "Both answers can be correct because they query different states. Neither establishes complete erasure.",
+      "anchor": "snapshots",
+      "question": "Why must an erasure process consider historical references?"
+    },
+    "expire": {
+      "title": "Metadata expiration and file deletion are separate",
+      "kind": "flow",
+      "rows": [
+        [
+          "Pinned runtime",
+          [
+            "Remove eligible snapshot reference",
+            "Time travel to it unavailable",
+            "Physical Parquet files remain"
+          ]
+        ]
+      ],
+      "note": "This is PyIceberg’s metadata-only expiration behavior in the pinned build, not a promise about every engine.",
+      "anchor": "snapshot-retention-policy",
+      "question": "Does expiration mean every file used by that snapshot can be deleted?"
+    },
+    "orphans": {
+      "title": "Current files are a subset of retained references",
+      "kind": "compare",
+      "rows": [
+        [
+          "Current snapshot",
+          [
+            "Consolidated file D"
+          ]
+        ],
+        [
+          "All retained snapshots",
+          [
+            "D plus historical A, B, C"
+          ]
+        ]
+      ],
+      "note": "A, B and C are historical-only, not orphaned. Production cleanup also accounts for in-flight writes and age.",
+      "anchor": "deleting-files",
+      "question": "Why is physical-files minus current-files an unsafe orphan-deletion rule?"
+    },
+    "stale-commit": {
+      "title": "A second writer must validate fresh assumptions",
+      "kind": "flow",
+      "rows": [
+        [
+          "Interleaving",
+          [
+            "A and B read schema 0",
+            "A commits schema 1",
+            "B requires schema 0",
+            "B is rejected"
+          ]
+        ]
+      ],
+      "note": "The real SQLite catalog enforces the stale schema requirement. This sequential interleaving is not a timing benchmark.",
+      "anchor": "commit-conflict-resolution-and-retry",
+      "question": "Which assumption has become invalid when the second schema commit fails?"
+    },
+    "retry": {
+      "title": "Retry intent on fresh state",
+      "kind": "flow",
+      "rows": [
+        [
+          "Compatible retry",
+          [
+            "A commits note",
+            "B reloads current schema",
+            "B validates and adds source",
+            "Both fields survive"
+          ]
+        ]
+      ],
+      "note": "Reloading preserves the other writer’s change; it does not automatically make every business operation safe to retry.",
+      "anchor": "commit-conflict-resolution-and-retry",
+      "question": "What must a writer revalidate before retrying?"
+    },
+    "atomic-pointer": {
+      "title": "Preparation is not publication",
+      "kind": "compare",
+      "rows": [
+        [
+          "Before publish",
+          [
+            "Pointer → metadata v1",
+            "Only file A is visible",
+            "B may already exist"
+          ]
+        ],
+        [
+          "After publish",
+          [
+            "Pointer → metadata v2",
+            "A and B are referenced"
+          ]
+        ]
+      ],
+      "note": "An atomic publication model. Readers follow the committed pointer rather than discovering prepared files.",
+      "anchor": "optimistic-concurrency",
+      "question": "Why must publication validate the expected prior state?"
+    },
+    "tags": {
+      "title": "A tag stays fixed while main advances",
+      "kind": "compare",
+      "rows": [
+        [
+          "Report tag",
+          [
+            "report-close → S3",
+            "120 rows"
+          ]
+        ],
+        [
+          "After append",
+          [
+            "main → S4",
+            "160 rows"
+          ]
+        ]
+      ],
+      "note": "The tag names a snapshot; it does not make another physical copy of every data file.",
+      "anchor": "snapshot-references",
+      "question": "How do tag and branch references differ?"
+    },
+    "delete-tradeoff": {
+      "title": "Move work between writes and reads",
+      "kind": "compare",
+      "rows": [
+        [
+          "Copy-on-write",
+          [
+            "Rewrite affected data now",
+            "Read replacement data"
+          ]
+        ],
+        [
+          "Merge-on-read",
+          [
+            "Write delete information now",
+            "Apply deletes during later reads"
+          ]
+        ]
+      ],
+      "note": "An illustrative tradeoff, not a delete-file benchmark. Reader and writer support must be verified.",
+      "anchor": "row-level-deletes",
+      "question": "Why can a smaller immediate write create repeated work for readers?"
+    },
+    "compatibility": {
+      "title": "The table’s required features must fit each reader",
+      "kind": "flow",
+      "rows": [
+        [
+          "Compatibility",
+          [
+            "Table uses specific features",
+            "Check reader capabilities",
+            "Test representative files",
+            "Deploy only supported operations"
+          ]
+        ]
+      ],
+      "note": "A shared format-version claim does not establish every required feature. Example reader names are illustrative.",
+      "anchor": "format-versioning",
+      "question": "Why is a format version alone insufficient evidence of interoperability?"
+    },
+    "discovery-access": {
+      "title": "Two permission paths can disagree",
+      "kind": "compare",
+      "rows": [
+        [
+          "Catalog path",
+          [
+            "List denied",
+            "Cannot discover table"
+          ]
+        ],
+        [
+          "Known object path",
+          [
+            "Storage read allowed",
+            "Can still read bytes"
+          ]
+        ]
+      ],
+      "note": "This policy model exposes a bypass path; it does not implement a trusted authorization boundary.",
+      "anchor": "overview",
+      "question": "Which layer must prevent a reader with a known path from reading raw files?"
+    },
+    "row-policy": {
+      "title": "A filtered result does not protect its source",
+      "kind": "compare",
+      "rows": [
+        [
+          "Governed path",
+          [
+            "Apply EU filter",
+            "60 returned rows"
+          ]
+        ],
+        [
+          "Bypass path",
+          [
+            "Read source directly",
+            "120 rows available"
+          ]
+        ]
+      ],
+      "note": "Production row policies require trusted enforcement and controls on bypass access. Browser filtering alone is inspectable.",
+      "anchor": "overview",
+      "question": "Why is a query filter not sufficient to enforce a row-access policy?"
+    },
+    "metadata-leak": {
+      "title": "Metadata can reveal information before row reads",
+      "kind": "parallel",
+      "rows": [
+        [
+          "Exposure",
+          [
+            "Metadata JSON → column names",
+            "Manifest entries → paths and counts",
+            "Bounds → information about values"
+          ]
+        ]
+      ],
+      "note": "These are parallel exposures. Protecting row-query results alone does not protect all metadata information.",
+      "anchor": "field-level-metrics-and-statistics",
+      "question": "Which manifest metrics could reveal information even without reading Parquet rows?"
+    },
+    "audit": {
+      "title": "Bind the result to its reproducible inputs",
+      "kind": "flow",
+      "rows": [
+        [
+          "Evidence record",
+          [
+            "Query text + identity context",
+            "Snapshot + schema + metadata",
+            "Pinned software context",
+            "Retain referenced files"
+          ]
+        ]
+      ],
+      "note": "A local evidence export is useful for replay but is not a tamper-resistant audit service.",
+      "anchor": "point-in-time-reads-time-travel",
+      "question": "What else is needed once an audit record contains a snapshot ID?"
+    },
+    "erasure": {
+      "title": "One deletion leaves several copies to address",
+      "kind": "compare",
+      "rows": [
+        [
+          "Current table",
+          [
+            "Row logically removed"
+          ]
+        ],
+        [
+          "Other locations",
+          [
+            "Retained snapshots",
+            "Object versions",
+            "Exports and backups"
+          ]
+        ]
+      ],
+      "note": "The inventory illustrates organizational obligations. It is not proof that all in-scope copies have been erased.",
+      "anchor": "snapshot-retention-policy",
+      "question": "Which copies fall outside a current-table DELETE operation?"
+    },
+    "retention-policy": {
+      "title": "Age is one retention condition, not the whole decision",
+      "kind": "flow",
+      "rows": [
+        [
+          "Eligibility",
+          [
+            "Old enough?",
+            "Protected reference or hold?",
+            "Apply retention policy",
+            "Only then assess cleanup"
+          ]
+        ]
+      ],
+      "note": "Legal holds are organizational controls. Format retention rules do not automatically enforce every legal obligation.",
+      "anchor": "snapshot-retention-policy",
+      "question": "How do protected snapshot references constrain expiration?"
+    },
+    "workload": {
+      "title": "One layout, two different selection patterns",
+      "kind": "compare",
+      "rows": [
+        [
+          "EU report",
+          [
+            "3 EU files",
+            "60 candidate records"
+          ]
+        ],
+        [
+          "ID 1005 lookup",
+          [
+            "2 overlapping ID ranges",
+            "40 candidate records"
+          ]
+        ]
+      ],
+      "note": "Bounds on the two region files overlap for this ID. Inspect statistics instead of relying only on partition names.",
+      "anchor": "scan-planning",
+      "question": "How can file metrics help a predicate on a non-partition column?"
+    },
+    "sort-layout": {
+      "title": "Grouping adjacent IDs narrows file ranges",
+      "kind": "compare",
+      "rows": [
+        [
+          "Interleaved layout",
+          [
+            "Overlapping ranges",
+            "3 files may contain ID 5"
+          ]
+        ],
+        [
+          "Clustered layout",
+          [
+            "Narrower disjoint ranges",
+            "1 file may contain ID 5"
+          ]
+        ]
+      ],
+      "note": "Both layouts contain the same rows and three files. Explicitly arranged writes are not a declared sort-order guarantee.",
+      "anchor": "sorting",
+      "question": "Why can ordering values improve metadata pruning without changing query results?"
+    },
+    "cost-budget": {
+      "title": "Request overhead and byte transfer are separate costs",
+      "kind": "flow",
+      "rows": [
+        [
+          "Serial model",
+          [
+            "Fixed bytes",
+            "More files → more requests",
+            "Per-request overhead grows",
+            "Estimated time changes"
+          ]
+        ]
+      ],
+      "note": "A teaching model. Parallel requests, caching and range reads can invalidate the simple serial estimate.",
+      "anchor": "scan-planning",
+      "question": "Which real I/O behaviors are omitted from the serial request model?"
+    },
+    "benchmark": {
+      "title": "An optimization needs two kinds of evidence",
+      "kind": "compare",
+      "rows": [
+        [
+          "Correctness",
+          [
+            "Same grouping query",
+            "Equal counts and totals"
+          ]
+        ],
+        [
+          "Physical work",
+          [
+            "3 files before rewrite",
+            "1 current file afterward"
+          ]
+        ]
+      ],
+      "note": "A smaller live file count is useful only if the business answer remains correct. Historical storage remains separate.",
+      "anchor": "snapshots",
+      "question": "Why does an equal row count alone not prove that a rewrite preserved the answer?"
+    },
+    "incident": {
+      "title": "Repair fragmentation and preserve the answer",
+      "kind": "flow",
+      "rows": [
+        [
+          "Repair",
+          [
+            "12 tiny current files",
+            "Capture grouped answer",
+            "Rewrite into 1 current file",
+            "Compare the answer again"
+          ]
+        ]
+      ],
+      "note": "The repair reduces current fragmentation. Retained history, rewrite resources and writer contention still need policies.",
+      "anchor": "snapshots",
+      "question": "Which costs remain after current-file consolidation succeeds?"
+    },
+    "recommendation": {
+      "title": "Connect a decision to evidence and its limits",
+      "kind": "flow",
+      "rows": [
+        [
+          "Recommendation",
+          [
+            "Representative workload",
+            "Correct results + candidate work",
+            "Decision with explicit risks",
+            "Next production measurement"
+          ]
+        ]
+      ],
+      "note": "A defensible recommendation states what the local fixture supports and what could overturn the proposed design.",
+      "anchor": "scan-planning",
+      "question": "What evidence would make you revise the recommended layout?"
+    }
+  },
+  "recaps": {
+    "snapshots": {
+      "title": "Watch snapshots share a table’s history",
+      "scenes": [
+        {
+          "title": "A new batch does not erase yesterday",
+          "text": "A report needs a consistent table state while ingestion keeps adding orders. Iceberg records successive states as snapshots. A snapshot describes a complete state using file references; it is not merely a bag of newly inserted rows."
+        },
+        {
+          "title": "Follow the parent links",
+          "text": "In the default lesson fixture, the first batch creates snapshot one with forty rows. The second creates a state with eighty rows and names the first as its parent. The third state contains one hundred and twenty rows. Older immutable data files can be reused across these states."
+        },
+        {
+          "title": "Choose the state before querying",
+          "text": "Reading an older snapshot selects its referenced inputs before the query runs. Keeping a snapshot identifier in a report is not enough on its own. Its metadata and data files must remain available. Run the lesson, follow the parent identifiers, then explain which state the current count describes."
+        }
+      ]
+    },
+    "bounds": {
+      "title": "Watch a predicate exclude files",
+      "scenes": [
+        {
+          "title": "One result can require much more work",
+          "text": "A query returning one order does not prove that the reader inspected one row. Iceberg first uses metadata to choose candidate files. Rows in a kept file can still fail the row filter."
+        },
+        {
+          "title": "Test each file’s range",
+          "text": "The fixture has three batches with disjoint order identifier ranges. For order one thousand and five, the ranges zero to thirty nine and two thousand to two thousand and thirty nine cannot match. Only the range one thousand to one thousand and thirty nine is kept."
+        },
+        {
+          "title": "Keep pruning and filtering separate",
+          "text": "The remaining file contains forty candidate records, but only one row matches. These are different quantities. Selected file bytes are a sum of file sizes, not measured network traffic. Run the experiment with an Iceberg row filter, then change the target to a value outside every range."
+        }
+      ]
+    },
+    "atomic-pointer": {
+      "title": "Watch preparation become a published state",
+      "scenes": [
+        {
+          "title": "An uploaded file is not yet a committed change",
+          "text": "A writer may finish uploading a new data file before it publishes the table change. If a reader treated every physical file as a member, it could read unfinished work. Iceberg readers instead follow the committed metadata state."
+        },
+        {
+          "title": "Publish one complete state",
+          "text": "In this publication model, the catalog pointer initially names metadata version one, which references file A. File B can already exist. Preparing metadata version two still does not change the reader’s view. Successful publication changes the pointer so readers can resolve a state referencing both A and B."
+        },
+        {
+          "title": "Validate before replacing the pointer",
+          "text": "Publication must check the writer’s expected starting state. If another writer has changed it, a blind replacement could lose that change. This lesson models the boundary, not a distributed catalog service. Run the real stale schema commit lesson to observe requirement validation in the local catalog."
+        }
+      ]
+    }
+  }
+}

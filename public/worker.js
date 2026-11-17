@@ -11,7 +11,7 @@ async function boot(){
   py = await loadPyodide({indexURL,packageBaseUrl,lockFileURL});
   status('Loading Iceberg, Arrow and DuckDB packages…');
   const lock = await (await fetch(lockFileURL)).json();
-  await py.loadPackage(Object.keys(lock.packages), {messageCallback:status});
+  await py.loadPackage(Object.keys(lock.packages), {messageCallback:()=>status('Loading the Iceberg lesson tools…')});
   for(const name of ['shims.py','lab.py']){
     const response = await fetch(new URL('python/'+name,base));
     if(!response.ok) throw new Error('Cannot load '+name);

@@ -10,10 +10,10 @@ test('every lesson has a scoped diagram and a source-guided reading task',()=>{
  for(const l of lessons){
   const v=visuals[l.id];assert.ok(v.title&&v.note&&v.question&&v.anchor,l.id);
   assert.ok(v.rows.length>=1&&v.rows.every(([,nodes])=>nodes.length>=1),l.id);
-  assert.match(diagram(l.id),/not a live experiment result/);
+  assert.match(diagram(l.id),/does not update when you edit the code/);
   assert.match(references(l),new RegExp('https://iceberg.apache.org/spec/#'+v.anchor));
   assert.match(references(l),/Compare your explanation/);
-  assert.match(references(l),/format-v2 fixtures/);
+  assert.match(references(l),/format-v2 examples/);
  }
 });
 test('recaps have real fast-start MP4s, caption-aligned transcripts and bounded timelines',async()=>{

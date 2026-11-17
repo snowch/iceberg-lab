@@ -9,23 +9,23 @@ Iceberg first uses metadata to choose candidate files.
 00:00:08.945 --> 00:00:12.320
 Rows in a kept file can still fail the row filter.
 
-00:00:13.820 --> 00:00:18.445
-The fixture has three batches with disjoint order identifier ranges.
+00:00:13.820 --> 00:00:18.795
+The example has three files with order identifier ranges that do not overlap.
 
-00:00:18.445 --> 00:00:25.295
+00:00:18.795 --> 00:00:25.645
 For order one thousand and five, the ranges zero to thirty nine and two thousand to two thousand and thirty nine cannot match.
 
-00:00:25.295 --> 00:00:29.220
+00:00:25.645 --> 00:00:29.570
 Only the range one thousand to one thousand and thirty nine is kept.
 
-00:00:30.720 --> 00:00:35.890
+00:00:31.070 --> 00:00:36.240
 The remaining file contains forty candidate records, but only one row matches.
 
-00:00:35.890 --> 00:00:37.970
+00:00:36.240 --> 00:00:38.320
 These are different quantities.
 
-00:00:37.970 --> 00:00:42.540
+00:00:38.320 --> 00:00:42.890
 Selected file bytes are a sum of file sizes, not measured network traffic.
 
-00:00:42.540 --> 00:00:49.050
+00:00:42.890 --> 00:00:49.400
 Run the experiment with an Iceberg row filter, then change the target to a value outside every range.

@@ -37,7 +37,7 @@ site works under the GitHub Pages project subpath.
 
 ```sh
 npm run build       # static output: dist/
-npm test            # content checks + all 42 lessons in actual Pyodide WASM under Node
+npm test            # content checks + 42 originals and 42 variations in actual Pyodide WASM
 npx playwright install chromium
 npm run test:browser # browser worker, exports, checks, error recovery, mobile, deep links
 ```
@@ -76,7 +76,7 @@ inspection and export helpers; the operations in `public/lessons.js` call upstre
 - SQL materializes a PyIceberg scan before DuckDB execution. SQL predicates are not pushed into that scan.
   Use `table.scan(row_filter=...)` to exercise actual Iceberg pruning.
 - Candidate records and selected file bytes are planning metrics, not measured I/O or network bytes.
-  Displayed elapsed time includes fixture setup and the check. It is not a production query benchmark.
+  Runtime timings in exported evidence include preparation and checks; they are not isolated query benchmarks.
 - Identity partition writes work. Native day/bucket write transforms are unavailable in this pinned build.
 - Deletes are copy-on-write. Delete-file generation and distributed compaction are not implemented.
   Small-table consolidation uses a full overwrite and retains historical files.
@@ -102,7 +102,8 @@ runtime before changing expected behavior. Verify fixture correctness as well as
 - `public/app.js`: accessible lesson reader and worker lifecycle.
 - `public/worker.js`: worker protocol and local runtime loader.
 - `public/python/lab.py`: fixtures, observations, file inspection and export.
-- `tests/wasm.mjs`: every lesson, independent reruns, changed-code checks, recovery and exports.
+- `tests/wasm.mjs`: all original lessons and suggested variations, independent reruns, recovery and exports.
+- `tests/variations.json`: runnable edits and dedicated assertions for every suggested variation.
 - `tests/browser/lab.spec.mjs`: browser flow including the GitHub Pages subpath.
 
 ## Attribution
@@ -116,11 +117,11 @@ Apache Iceberg, PyIceberg, Arrow, DuckDB and Pyodide remain their respective pro
 
 ## Learning and design refinements
 
-Every lesson includes a concept explanation, optional saved prediction/reflection, progressive hints and an
-output-reading cue. Each section ends with a transfer scenario and self-review rubric. Three task-oriented
+Every lesson separates automatic preparation from the learner’s action, gives a visible worked explanation,
+and specifies an edit to try next. Prediction and reflection notes are optional and saved locally. Each section ends with a transfer scenario and self-review rubric. Three task-oriented
 entry paths complement the full sequence. These additions remain optional so the core lessons stay focused.
 
-`public/learning.js` holds lesson scaffolds and section review prompts. `public/refinement.css` holds the
+`public/learning.js` holds preparation, action, code explanations and section review prompts. `public/refinement.css` holds the
 responsive visual refinements. [Learning, UX and design review](docs/learning-ux-review.md) records the review
 criteria, available skill guidance, changes, verification and the distinction between implementation checks
 and evidence of learning effectiveness.
@@ -141,3 +142,6 @@ To regenerate the three original recordings, install FFmpeg with `libflite`, `li
 `libopus`, plus the project's Chromium, then run `npm run media`. Production builds use committed assets
 under `public/media/`; no TTS or video tool is needed by learners or normal CI builds. Content is defined
 in `public/visuals.js` and `public/recaps.js`; `public/media-manifest.js` is generated.
+
+The [course copy and disclosure audit](docs/course-copy-audit.md) records the sentence-level review,
+corrected instructions, removed clutter and rationale for the remaining optional sections.

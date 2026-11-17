@@ -1,8 +1,8 @@
 export const media = {
   "snapshots": {
     "durationSeconds": 55,
-    "bytes": 544445,
-    "webmBytes": 601563,
+    "bytes": 550731,
+    "webmBytes": 613653,
     "scenes": [
       {
         "title": "A new batch does not erase yesterday",
@@ -12,12 +12,12 @@ export const media = {
       {
         "title": "Follow the parent links",
         "start": 16.330000000000002,
-        "end": 34.585
+        "end": 34.655
       },
       {
         "title": "Choose the state before querying",
-        "start": 34.585,
-        "end": 54.57
+        "start": 34.655,
+        "end": 54.64
       }
     ],
     "speech": {
@@ -28,8 +28,8 @@ export const media = {
   },
   "bounds": {
     "durationSeconds": 51,
-    "bytes": 528365,
-    "webmBytes": 585056,
+    "bytes": 536106,
+    "webmBytes": 598710,
     "scenes": [
       {
         "title": "One result can require much more work",
@@ -39,12 +39,12 @@ export const media = {
       {
         "title": "Test each file\u2019s range",
         "start": 13.32,
-        "end": 30.22
+        "end": 30.57
       },
       {
         "title": "Keep pruning and filtering separate",
-        "start": 30.22,
-        "end": 50.05
+        "start": 30.57,
+        "end": 50.4
       }
     ],
     "speech": {
@@ -55,8 +55,8 @@ export const media = {
   },
   "atomic-pointer": {
     "durationSeconds": 57,
-    "bytes": 630378,
-    "webmBytes": 691638,
+    "bytes": 637759,
+    "webmBytes": 702981,
     "scenes": [
       {
         "title": "An uploaded file is not yet a committed change",

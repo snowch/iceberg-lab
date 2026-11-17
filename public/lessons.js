@@ -14,22 +14,22 @@ function lesson(id, part, title, goal, story, predict, code, check, worked, chan
 }
 export const lessons = [
 lesson('catalog',0,'How a query finds its table',
-'Resolve a table name to its current metadata file.',
+'Find the metadata file that describes an empty table.',
 'Imagine a sales dashboard querying shop.orders: orders is the table, and shop groups related tables. Before opening data files, the reader asks the catalog which metadata file describes that table now.',
-'Will creating a table create a data file?',
-`show(catalog.list_tables('shop'))
+'What counts do you expect for rows and data_files in an empty table? Will metadata still name a file?',
+`show({'tables': ['.'.join(name) for name in catalog.list_tables('shop')]})
 show({'metadata': table.metadata_location,
       'rows': table.scan().count(),
       'data_files': len(files())})`,
 `assert table.scan().count() == 0
 assert len(files()) == 0
 assert Path(table.metadata_location.replace('file://','')).exists()`,
-'The name resolves to a metadata JSON file. The empty table has a schema and a location but no data files or snapshots. Catalog state and data state are different layers.',
-'Change the setup to reset(batches=1). Find what appears after the first append.',
+'The output lists shop.orders and a metadata file address, while rows and data_files are both 0. The table already has a name and column definitions, even though no order data has been written. The catalog records where that definition is stored.',
+'Add `append(0)` as the first line in the editor, then click Run experiment again. This adds 40 orders before the inspection. Which output values change?',
 'What does the catalog resolve?', ['A table name to its metadata location','A row ID to a byte offset','A SQL query to its final answer'],0,{setup:'reset(batches=0)'}),
 lesson('membership',0,'A directory is not a table',
-'Distinguish physical files from committed table membership.',
-'A failed job leaves an extra Parquet file beside the table. A directory scan could accidentally include it.',
+'Distinguish files on disk from files belonging to the current table.',
+'A job writes an extra Parquet file but fails before adding it to the table’s metadata. A reader that scans the directory could accidentally include this unfinished work.',
 'Will the extra file change an Iceberg count?',
 `before = table.scan().count()
 extra = Path(table.location().replace('file://','')) / 'data' / 'uncommitted.parquet'
@@ -38,12 +38,12 @@ after = table.scan().count()
 show({'before':before, 'after':after, 'extra_exists':extra.exists()})`,
 `assert before == after == 120
 assert extra.exists()`,
-'The count stays at 120. Iceberg reads the files referenced by the snapshot, so the uncommitted file is invisible. Its presence alone does not prove it is safe to delete in a live system.',
-'Give the extra file ten rows. Does the count change?',
-'What establishes membership?', ['The committed metadata graph','A .parquet suffix','The newest directory timestamp'] ),
+'The count stays at 120. Iceberg follows the current table’s metadata to its data files, so the extra file is not included. Its presence alone does not prove it is safe to delete in a live system.',
+'In the editor, replace `[99999]` with `list(range(10))`, then run again. The extra file now has ten rows. Does after change?',
+'What establishes membership?', ['The file references in committed table metadata','A .parquet suffix','The newest directory timestamp'] ),
 lesson('metadata',0,'Read the metadata JSON',
 'Locate the current snapshot, schema and partition specification.',
-'You need to explain what changed without opening a single data file.',
+'To find out which table definition a reader is using, inspect its current metadata JSON file. It records column definitions (schemas), rules for grouping files (partition specifications) and saved table states (snapshots). JSON is a text format for named values and lists.',
 'Are schemas and snapshots stored in the same metadata document?',
 `metadata_path = Path(table.metadata_location.replace('file://',''))
 metadata = json.loads(metadata_path.read_text())
@@ -51,12 +51,12 @@ show({key:metadata[key] for key in ['format-version','current-snapshot-id','curr
 show({'schemas':len(metadata['schemas']), 'snapshots':len(metadata['snapshots'])})`,
 `assert metadata['format-version'] == 2
 assert len(metadata['snapshots']) == 3`,
-'The metadata document records the current identifiers and historical definitions. The catalog pointer chooses this metadata version; the directory may contain older versions too.',
-'Print the snapshot-log and compare its entries with the snapshots array.',
-'Why can there be several metadata JSON files?', ['Each commit can write a new immutable metadata version','Each region must have one','Each JSON file contains a different data row'] ),
+'The current-… identifiers select definitions within this metadata document. schemas and snapshots count the definitions it records. Other metadata JSON files can remain in the directory after later changes, so the catalog’s current location determines which document to use.',
+'Add `show(metadata[\'snapshot-log\'])` at the end of the editor and run again. How many published state changes are listed?',
+'Why can there be several metadata JSON files?', ['Each completed change can write a new metadata file','Each region must have one','Each JSON file contains a different data row'] ),
 lesson('manifest-list',0,'Open a manifest list',
 'Follow one snapshot to its manifest files.',
-'The current snapshot points to an Avro manifest list. It summarizes manifests so a planner can avoid unnecessary work.',
+'A snapshot describes one table state. It points to a manifest list, which lists the manifests needed to find that state’s data files. These lists use the Avro file format.',
 'Will the list contain order rows or references to manifests?',
 `snapshot = table.current_snapshot()
 manifest_list = list(read_manifest_list(table.io.new_input(snapshot.manifest_list)))
@@ -67,11 +67,11 @@ show([{'path':m.manifest_path,'spec_id':m.partition_spec_id,
 `assert len(manifest_list) > 0
 assert all(m.manifest_path.endswith('.avro') for m in manifest_list)`,
 'The list contains manifest references, not order rows. File counts describe entries in each manifest; an existing manifest can be reused by a later snapshot.',
-'Inspect the first snapshot’s list using table.metadata.snapshots[0].',
+'Replace `table.current_snapshot()` with `table.metadata.snapshots[0]` in the first line, then run again. Does the earliest state refer to fewer manifests?',
 'What does a manifest list reference?', ['Manifest files','Individual SQL operators','Only Parquet row groups'] ),
 lesson('manifest',0,'Read file entries',
 'Find data-file paths and record counts in a manifest.',
-'Before a planner opens Parquet, Iceberg already knows a file’s size, record count and statistics.',
+'A manifest is a file containing descriptions of data files. Its paths, row counts and statistics help Iceberg decide which data files a query may need.',
 'Can you account for all 120 rows from live file entries?',
 `entries = []
 for manifest in table.current_snapshot().manifests(table.io):
@@ -83,8 +83,8 @@ show(entries)
 show({'manifest_records':sum(e['rows'] for e in entries)})`,
 `assert sum(e['rows'] for e in entries) == 120
 assert len(entries) == 3`,
-'Three append files contribute 40 rows each. These are live entries in this append-only fixture. With row-level deletes, summing record counts alone does not necessarily give the visible row count.',
-'Print entry.status and entry.snapshot_id alongside each path.',
+'Three append files contribute 40 rows each. These are live entries in this append-only example. With row-level deletes, summing record counts alone does not necessarily give the visible row count.',
+'In the entries.append dictionary, replace `\'path\':entry.data_file.file_path,` with `\'path\':entry.data_file.file_path, \'status\':str(entry.status),`. Run again. What status is recorded for each entry?',
 'Where can file-level statistics be available?', ['In manifest entries before opening Parquet','Only in SQL output','Only in the catalog name'] ),
 lesson('parquet-ids',0,'Find identity in Parquet',
 'Inspect field IDs embedded in an actual data file.',
@@ -94,24 +94,23 @@ lesson('parquet-ids',0,'Find identity in Parquet',
 parquet = pq.ParquetFile(path)
 fields = [{'name':f.name,'id':(f.metadata or {}).get(b'PARQUET:field_id',b'').decode()}
           for f in parquet.schema_arrow]
-show(fields)
-show({'rows':parquet.metadata.num_rows,'row_groups':parquet.metadata.num_row_groups})`,
+show(fields)`,
 `assert [f['id'] for f in fields] == ['1','2','3']`,
 'The Parquet columns carry IDs 1, 2 and 3. Iceberg uses field identity when resolving evolved schemas. A plain Parquet reader looking only at names does not perform that table-level resolution.',
-'Compare those IDs with table.schema().fields.',
-'What survives a supported rename?', ['The field ID','The old SQL spelling must remain current','A new data file is required'] ),
-lesson('snapshots',1,'Trace snapshot ancestry',
+'Add `show(str(table.schema()))` at the end of the editor and run again. Do the IDs in the table schema match the stored IDs?',
+'What stays the same after a supported rename?', ['The field ID','The name used in new queries','The table’s metadata file address'] ),
+lesson('snapshots',1,'Follow the snapshot history',
 'Follow the parent links created by successive appends.',
 'Three ingest batches have committed. You need to explain which state each commit produced.',
-'Will each append create a snapshot with a new parent link?',
+'How do the second and third snapshots identify the states they followed?',
 `chain = history()
 show(chain)
 show({'visible_rows':table.scan().count()})`,
 `assert len(chain) == 3
 assert chain[1]['parent'] == chain[0]['id']
 assert chain[2]['parent'] == chain[1]['id']`,
-'The three snapshots form a parent chain. A snapshot describes a complete table state using referenced files; it is not just a standalone batch of new rows.',
-'Append batch 3, then print the new chain.',
+'The first snapshot has no parent. The second names the first as its parent, and the third names the second. Each snapshot describes a complete table state through file references; the parent link records how the states relate.',
+'Add `append(3)` as the first line in the editor and run again. How does the history change after a fourth append?',
 'What does a snapshot represent?', ['A table state','Only rows newly inserted by that commit','A copy of every data file'] ),
 lesson('time-travel',1,'Read an earlier snapshot',
 'Query two states of the same table.',
@@ -124,11 +123,11 @@ show({'first_snapshot':str(first),'then':then,'now':now})`,
 `assert then[0]['n'] == 40
 assert now[0]['n'] == 120`,
 'The first snapshot has 40 rows; the current one has 120. The ID selects the state before SQL runs. Reproducibility also requires retaining its files and knowing the query and software versions.',
-'Read the second snapshot instead. Predict its count before running.',
+'Replace `snapshots[0]` with `snapshots[1]` in the first line and run again. Predict the new then count before looking at it.',
 'What must remain available for time travel?', ['The retained snapshot and its referenced files','Only a snapshot ID written in a notebook','Only the newest metadata file'] ),
 lesson('immutable',1,'Watch an append reuse files',
 'Prove that an append preserves existing data files.',
-'You want to distinguish logical table growth from rewriting all existing data.',
+'An append adds rows to a table. This example checks whether it can reuse the old data files rather than rewriting their rows.',
 'Will an append replace the paths of the original three files?',
 `before = {f.file.file_path for f in files()}
 append(3)
@@ -138,8 +137,8 @@ show({'reused':len(before & after),'new':len(after-before),'rows':table.scan().c
 assert len(after-before) == 1
 assert table.scan().count() == 160`,
 'All three old files remain referenced and one file is added. New metadata and manifests describe the new state without copying the older Parquet files.',
-'Append another distinct batch and compare the sets again.',
-'Which cost is intrinsic to this append?', ['Writing new data and committing new metadata','Rewriting every old row','Deleting all old snapshots'] ),
+'Insert `append(4)` immediately after `append(3)`, then run again. How many original paths are reused and how many new paths appear?',
+'What must be written for this append?', ['Writing new data and committing new metadata','Rewriting every old row','Deleting all old snapshots'] ),
 lesson('rename',1,'Rename without rewriting',
 'Use field identity to read old files under a new name.',
 'The business calls region “market”. Existing data must still be readable.',
@@ -155,7 +154,7 @@ show(sql('SELECT market, count(*) AS n FROM orders GROUP BY market ORDER BY mark
 assert before == {f.file.file_path for f in files()}
 assert table.scan().count() == 120`,
 'The field remains ID 2, the existing files are reused, and current queries use market. Schema evolution commits metadata but does not itself create a new data snapshot.',
-'Inspect a Parquet schema after the rename. Its stored name is still region.',
+'Replace every `market` in the editor with `sales_region` and run again. Does another name change require different field IDs or files?',
 'Why does the renamed column still read correctly?', ['Iceberg maps the stable field ID','It rewrites every Parquet footer','It guesses names from column order'] ),
 lesson('add-column',1,'Add an optional column',
 'Observe nulls for data written before a field existed.',
@@ -168,8 +167,8 @@ show(result)
 show([{'name':f.name,'id':f.field_id} for f in table.schema().fields])`,
 `assert result[0]['rows'] == 120
 assert result[0]['populated'] == 0`,
-'The new optional field reads as null for old rows in this fixture. Adding a column does not backfill business values into previously written data.',
-'Change the query to count rows WHERE priority IS NULL.',
+'The new optional field reads as null for old rows in this example. Adding a column does not backfill business values into previously written data.',
+'Inside the sql(...) call, replace the SQL string with `SELECT count(*) AS missing FROM orders WHERE priority IS NULL`, keeping the quotes around it. Then run again. Does missing account for all 120 orders?',
 'What does adding this optional field do to old files?', ['Leaves them in place and resolves the missing field as null','Writes a priority value into every file','Drops their rows'] ),
 lesson('readd',1,'A reused name is a new field',
 'Distinguish a dropped field from a new field with the same name.',
@@ -186,7 +185,7 @@ show({'old_id':old_id,'new_id':new_id,'result':result})`,
 `assert new_id > old_id
 assert result[0]['populated'] == 0`,
 'The replacement receives a new field ID and old rows read null for it. Reusing a name does not resurrect the old field’s values.',
-'Inspect the Parquet field ID for amount and compare it with the current schema.',
+'Replace `DoubleType()` with `StringType()` in the `add_column` call, then run again. Does changing the new column’s type reconnect it to the retired values?',
 'Is the replacement amount the old field?', ['No; its field ID is different','Yes; names establish identity','Yes; because its numeric type matches'] ),
 lesson('baseline',2,'Measure the candidate scan',
 'Establish file and record counts before optimizing.',
@@ -197,12 +196,12 @@ show(baseline)
 show(sql('SELECT count(*) AS returned FROM orders WHERE order_id = 0'))`,
 `assert baseline['selected_files'] == 3
 assert baseline['candidate_records'] == 120`,
-'The baseline contains three files and 120 candidate records. The SQL helper materializes the Iceberg scan before SQL filtering, so this SQL predicate does not demonstrate Iceberg pushdown.',
-'Compare metrics("order_id = 0") with the baseline to ask Iceberg to plan a filtered scan.',
-'Can one returned row prove only one row was scanned?', ['No; output cardinality and scan work differ','Yes, always','Only when the result has one column'] ),
+'The Iceberg scan starts with three selected files containing 120 records. The SQL query then returns one matching order. In this lab’s sql helper, DuckDB applies WHERE after the Iceberg data has been read into memory. To test Iceberg file pruning, pass the condition directly to metrics or table.scan.',
+'Add `show(metrics(\'order_id = 0\'))` at the end of the editor and run again. Does supplying the filter to Iceberg change selected_files?',
+'Can one returned row prove only one row was scanned?', ['No; the number of returned rows and the scan work are different','Yes, always','Only when the result has one column'] ),
 lesson('bounds',2,'Skip files with bounds',
 'Pass a predicate to Iceberg and inspect file pruning.',
-'Order IDs arrive in disjoint ranges. A point lookup should eliminate unrelated files.',
+'A file’s bounds summarize its lowest and highest stored values. Iceberg can skip a file when those bounds prove that it cannot contain the requested order.',
 'Which of the three files can contain order_id 1005?',
 `all_files = metrics()
 pruned = metrics('order_id = 1005')
@@ -211,12 +210,12 @@ show(table.scan(row_filter='order_id = 1005').to_arrow())`,
 `assert pruned['selected_files'] == 1
 assert pruned['candidate_records'] == 40
 assert table.scan(row_filter='order_id = 1005').count() == 1`,
-'The planner selects one 40-row file using bounds, then evaluates the row filter. The candidate count is larger than the one matching row. Selected file bytes are a size sum, not measured network traffic.',
-'Use order_id = 999999. Predict how many files survive.',
+'For order 1005, Iceberg selects the file covering IDs 1000–1039. That file contains 40 candidate records; the row filter then finds the one matching order. selected_file_bytes adds up selected file sizes. It does not measure bytes read from storage.',
+'Replace both occurrences of `1005` with `999999` in the editor and run again. How many files can contain that value?',
 'What does a bound prove?', ['A file can be ruled out when its range cannot match','Every value inside the range exists','A matching file contains only matching rows'] ),
 lesson('residual',2,'Separate pruning from filtering',
-'Identify why a kept file still needs a row filter.',
-'A region filter matches half the orders, but every unpartitioned file contains both regions.',
+'Explain why selecting a file does not select all its rows.',
+'Every file in this example contains both EU and US orders. A filter on region therefore has two jobs: decide which files may contain EU orders, then select the matching rows within them.',
 'Can file bounds remove any whole file for region = EU?',
 `planned = metrics("region = 'EU'")
 matched = table.scan(row_filter="region = 'EU'").count()
@@ -224,12 +223,12 @@ show({'plan':planned,'matched_rows':matched})`,
 `assert planned['selected_files'] == 3
 assert planned['candidate_records'] == 120
 assert matched == 60`,
-'All files survive, but only 60 rows match. Keeping a file means it may match, not that every row matches. The residual predicate must still be evaluated.',
-'Compare region = US and region = APAC.',
+'All three files remain candidates, so their 120 records must still be considered. Only 60 rows match EU. The condition applied within the selected files is called the residual filter.',
+'Replace both `EU` values in the editor with `APAC` and run again. What happens when no file can contain the requested region?',
 'Why are all three files kept for EU?', ['Each file may contain EU rows','The filter is ignored','Iceberg cannot ever filter strings'] ),
 lesson('identity-partition',2,'Partition for one predicate',
 'Observe file pruning on a real identity-partitioned table.',
-'Queries frequently select one region. You write each batch into identity partitions.',
+'Identity partitioning groups files by an unchanged column value, such as EU or US. The example’s region files are already prepared so you can inspect how an EU filter selects them.',
 'Will partitioning reduce candidate records for region = EU?',
 `planned = metrics("region = 'EU'")
 show(planned)
@@ -239,11 +238,11 @@ show([{'spec_id':f.file.spec_id,'partition':str(f.file.partition),'rows':f.file.
 assert planned['selected_files'] == 3
 assert planned['candidate_records'] == 60`,
 'Three batches create six files, one per region per batch. The EU scan keeps three files and 60 candidate rows. Better pruning comes with more files to manage.',
-'Compare an order_id predicate on this layout. Does partitioning help every query equally?',
+'Replace `metrics("region = \'EU\'")` with `metrics(\'order_id = 1005\')` in the editor, then run again. Does a filter on a different column select the same files?',
 'What is the tradeoff here?', ['Fewer candidate rows for region filters but more files','Every query becomes faster by definition','Partitioning eliminates metadata work'],0,{setup:'reset(partitioned=True)'}),
 lesson('partition-evolution',2,'Evolve the specification',
-'Read old and new files under different partition specs.',
-'The first three batches were unpartitioned. You add a region partition without rewriting their data.',
+'Read files written under old and new partition rules.',
+'A partition specification records the rules used to group new files. This example adds a region rule after three unpartitioned files have already been written.',
 'Will existing files acquire region partition values?',
 `old_paths = {f.file.file_path for f in files()}
 with table.update_spec() as update:
@@ -255,11 +254,11 @@ show(metrics("region = 'EU'"))`,
 assert {f.file.spec_id for f in files()} == {0,1}
 assert metrics("region = 'EU'")['candidate_records'] == 140`,
 'The original three files retain spec 0. The new two files use spec 1. An EU scan still considers the 120 old rows plus 20 new EU rows; evolution alone does not reorganize old data.',
-'Append another batch and compare candidate records with total records.',
+'Insert `append(4)` immediately after `append(3)`, then run again. How many additional candidate records does the EU scan gain?',
 'Does changing the spec rewrite historical files?', ['No; old and new specs coexist','Yes; all files move immediately','Only file names change'] ),
 lesson('hidden-transforms',2,'Reason about hidden transforms',
-'Translate a source predicate into safe partition candidates.',
-'A production table partitions timestamps by day. Queries should use timestamps while the planner derives day candidates.',
+'Find which day partitions overlap a timestamp condition.',
+'A day partition groups timestamps by date. A query can use an exact timestamp range while a planner derives the possible dates, then checks the original time condition inside those dates.',
 'How many day partitions overlap a window crossing midnight?',
 `from datetime import datetime, timedelta
 start = datetime(2026,1,1,23,30)
@@ -272,11 +271,11 @@ while cursor <= (end-timedelta(microseconds=1)).date():
     cursor += timedelta(days=1)
 show({'half_open_window':[str(start),str(end)],'candidate_days':days})`,
 `assert days == ['2026-01-01','2026-01-02']`,
-'Two day partitions may match. Rows outside the time window can still occur in both, so the timestamp predicate remains necessary. This model teaches projection; the pinned browser writer supports identity partitioning, not native day/bucket writes.',
-'Set end to exactly midnight. The half-open interval should keep only the first day.',
-'Why keep the timestamp predicate?', ['Day projection is coarser than the original time window','Partitions are always corrupt','The query must spell a physical partition column'],0,{kind:'Planning model'}),
+'The window overlaps two dates, so either day may contain matching rows. Other times in those days still need to be excluded by the timestamp condition. This is a Python projection model; the pinned browser writer cannot create day- or bucket-transformed files.',
+'Replace `end = datetime(2026,1,2,0,30)` with `end = datetime(2026,1,2,0,0)`, then run again. How many days overlap the shorter window?',
+'Why keep the timestamp predicate?', ['A whole day can include times outside the requested window','Partitions are always corrupt','The query must spell a physical partition column'],0,{kind:'Planning model'}),
 lesson('small-files',3,'Count the cost of tiny batches',
-'Compare file counts for the same logical data.',
+'Compare file counts for two ways of writing the same number of rows.',
 'A stream commits each row separately. The rows are correct, but there is a file and commit for every append.',
 'Will 12 one-row appends create fewer files than one 12-row append?',
 `reset(batches=0)
@@ -289,11 +288,11 @@ bulk = {'files':len(files()),'rows':table.scan().count(),'snapshots':len(history
 show({'tiny':tiny,'bulk':bulk})`,
 `assert tiny['rows'] == bulk['rows'] == 12
 assert tiny['files'] == 12 and bulk['files'] == 1`,
-'Twelve commits create twelve files versus one. These fixtures compare operation overhead at equal row counts, not equivalent row values or production throughput. Both paths also have metadata costs.',
-'Try 24 one-row appends. Keep fixtures small enough for the browser.',
+'Twelve one-row appends create twelve data files and snapshots; one twelve-row append creates one of each. The row counts match, but the generated order values differ. This demonstrates file and commit overhead rather than comparing equal query answers or measuring production speed.',
+'Replace `range(12)` with `range(24)` and `rows=12` with `rows=24`, then run again. How do the file counts compare at the new, equal row count?',
 'What typically grows with tiny commits?', ['File and metadata overhead','Only the number of table columns','The logical row count must change'] ),
 lesson('compact',3,'Rewrite a fragmented table',
-'Preserve rows while reducing the number of live files.',
+'Reduce current data-file count without changing the rows.',
 'The table has three small files. A controlled full-table rewrite can consolidate them.',
 'Will old physical files disappear when the current snapshot stops using them?',
 `before_paths = {f.file.file_path for f in files()}
@@ -305,8 +304,8 @@ show({'before_files':len(before_paths),'after_files':len(files()),
 `assert before_rows == after_rows
 assert len(files()) == 1
 assert all(Path(p.replace('file://','')).exists() for p in before_paths)`,
-'The full rewrite produces one live file and preserves the rows. Old files remain for history. This is a small-table consolidation experiment using overwrite, not a distributed production compaction procedure.',
-'Compare selected_file_bytes before and after the rewrite. File count and compressed bytes need not fall by the same ratio.',
+'The rewrite replaces the three current data files with one new file and preserves the complete row values. The old files remain on disk for retained history. This small-table overwrite illustrates consolidation; it is not a distributed production compaction job.',
+'Add `show(metrics())` immediately before the line starting with `table.overwrite`, and again at the end of the editor. Run again and compare `selected_file_bytes` as well as `selected_files`.',
 'What did this rewrite reduce immediately?', ['The current snapshot’s live file count','All historical storage','The number of rows'] ),
 lesson('delete',3,'Observe a copy-on-write delete',
 'Identify which file changes when a row is deleted.',
@@ -320,8 +319,8 @@ show({'removed_from_current':len(before-after),'new_files':len(after-before),
 `assert table.scan().count() == 119
 assert len(before & after) == 2
 assert len(after-before) == 1`,
-'One affected file is replaced; two others are reused. The original file remains physically present. This is copy-on-write, not a positional or equality delete-file demonstration.',
-'Delete order_id >= 2000. Compare whole-file removal with a partial-file rewrite.',
+'One affected file is replaced; two others are reused. The original file remains on disk for older snapshots. This is copy-on-write: the writer puts the surviving rows into a replacement data file instead of writing a separate delete file.',
+'Replace `order_id = 0` with `order_id >= 2000` and run again. Does deleting every row in one file require writing a replacement file?',
 'Why are two files reused?', ['They contain no rows matching this delete','Deletes only affect the newest file','A catalog cannot replace multiple files'] ),
 lesson('deleted-history',3,'Find deleted rows in history',
 'Demonstrate why a logical delete is not complete erasure.',
@@ -335,7 +334,7 @@ show({'current':current,'historical':historical})`,
 `assert current[0]['n'] == 0
 assert historical[0]['n'] == 1`,
 'The current state has zero matches; the retained state has one. An erasure process must account for snapshots, retained files, object versions, replicas, exports and backups according to its requirements.',
-'List the old snapshot’s files and check whether they still exist.',
+'Add `show([task.file.file_path for task in files(old)])` at the end of the editor and run again. Which files does the older snapshot still reference?',
 'Does a successful DELETE prove complete erasure?', ['No; retained copies and history must be addressed','Yes; all snapshots are modified in place','Yes; if the latest query returns no rows'] ),
 lesson('expire',3,'Expire a snapshot reference',
 'Separate loss of time travel from physical file cleanup.',
@@ -351,7 +350,7 @@ show({'expired_id_present':any(s.snapshot_id == oldest for s in table.metadata.s
 assert all(s.snapshot_id != oldest for s in table.metadata.snapshots)
 assert physical_before == physical_after`,
 'The oldest snapshot leaves current metadata. PyIceberg’s metadata-only expiration in this runtime does not delete its files. Files may also still be referenced by other snapshots, so expiration is not a storage-reclamation count.',
-'Inspect current rows after expiration. They remain unchanged.',
+'Add `show(table.scan().count())` at the end of the editor and run again. Does removing the oldest snapshot change the current table’s 120 rows?',
 'What has this operation established?', ['The expired snapshot is no longer retained by current metadata','Every file it used is now safe to remove','All its rows disappeared from the current table'] ),
 lesson('orphans',3,'Check every retained snapshot',
 'Avoid calling historical files orphaned just because they are not current.',
@@ -367,8 +366,8 @@ show({'current_files':len(current_paths),'retained_files':len(retained_paths),
       'historical_only':len(historical_only)})`,
 `assert len(historical_only) == 3
 assert all(Path(p.replace('file://','')).exists() for p in historical_only)`,
-'Three files are historical-only and still referenced. This is an inventory of data files in one local table, not a production orphan-deletion algorithm. Real cleanup must handle metadata files, other references, in-flight writes, path normalization and an age safety window.',
-'Inspect the first snapshot count to verify those files are still useful.',
+'Three files are used only by older snapshots, but they are still referenced and readable. They are therefore not orphan files. A production cleanup process must also account for other references, metadata files, writes still in progress and a safe minimum file age.',
+'Add `show(table.scan(snapshot_id=table.metadata.snapshots[0].snapshot_id).count())` at the end of the editor and run again. Can the first snapshot still read its rows?',
 'Which set is unsafe to treat automatically as garbage?', ['All physical files minus current files','Files proven unreferenced after a safe age window','Files belonging to a deliberately deleted temporary export'] ),
 lesson('stale-commit',4,'Reject a stale schema commit',
 'Observe an optimistic-concurrency failure from the real catalog.',
@@ -392,11 +391,11 @@ show({'second_rejected':rejected,'columns':table.schema().column_names})`,
 assert 'note_a' in table.schema().column_names
 assert 'note_b' not in table.schema().column_names`,
 'The second commit fails because its schema requirement is stale. The SQLite catalog performs the check for this sequential interleaving. This proves a conflict condition, not distributed lock timing or service availability.',
-'Swap the commit order and predict which column is present.',
+'Swap `note_a` and `note_b` throughout the editor, then run again. Which column is now added by the first successful writer?',
 'What should a stale writer do next?', ['Reload and revalidate its intended change','Blindly replace the latest metadata pointer','Delete the other writer’s metadata'] ),
-lesson('retry',4,'Rebase a compatible change',
-'Reload catalog state before applying another evolution.',
-'Another writer has already added a note. Your independent source column still needs to be added.',
+lesson('retry',4,'Reload before a compatible change',
+'Preserve another writer’s change when adding a compatible column.',
+'Writer A adds a note column. Writer B then reloads the updated table before adding source. The example shows what that reload preserves; it does not implement an automatic retry loop.',
 'Can reloading preserve the other writer’s change?',
 `writer_a = catalog.load_table('shop.orders')
 with writer_a.update_schema() as update:
@@ -410,7 +409,7 @@ show([{'name':f.name,'id':f.field_id} for f in table.schema().fields])`,
 `assert {'note','source'} <= set(table.schema().column_names)
 assert len({f.field_id for f in table.schema().fields}) == 5`,
 'Both changes survive with distinct IDs. Reloading is necessary but not sufficient for every retry: conflicting business operations may need rejection or recomputation.',
-'Try adding source twice and inspect the validation error.',
+'Replace `update.add_column(\'source\',StringType())` with `update.add_column(\'note\',StringType())` and run again. Read the error caused by trying to add an existing column; Reset code restores the original example.',
 'When is a retry sound?', ['After checking that the intent remains valid on the new state','Whenever an exception occurs','Only if the previous writer’s change is discarded'] ),
 lesson('atomic-pointer',4,'Publish one complete state',
 'Model why file creation and table publication are separate steps.',
@@ -431,7 +430,7 @@ show({'before_publish':before,'after_publish':after,'written_files':sorted(writt
 `assert before == ['file-a']
 assert after == ['file-a','file-b']`,
 'Before publication, readers use the old complete state. After publication, they use the new complete state. Writing a file alone does not commit it. Real catalogs implement atomic publication and requirements through their own mechanisms.',
-'Change expected to metadata-v0 to model a failed compare-and-swap.',
+'Replace `expected = \'metadata-v1\'` with `expected = \'metadata-v0\'`, then run again. Does the pointer change when the expected starting state is wrong?',
 'What makes an uncommitted new file visible?', ['Publishing a metadata state that references it','Its upload finishing','Its name sorting last'],0,{kind:'Commit model'}),
 lesson('tags',4,'Pin a reproducible report',
 'Create a real tag referencing a known snapshot.',
@@ -448,12 +447,12 @@ show({'tag_snapshot':str(ref.snapshot_id),
 `assert ref.snapshot_id == pinned
 assert table.current_snapshot().snapshot_id != pinned
 assert table.scan(snapshot_id=ref.snapshot_id).count() == 120`,
-'The tag remains on its original snapshot while main advances. A tag supports naming a reproducible state; its retention settings and referenced files still matter.',
-'List table.metadata.refs and compare main with report-close.',
+'The tag remains on its original snapshot while main, the reference to the current state, advances. A tag supports naming a reproducible state; its retention settings and referenced files still matter.',
+'Add `show({name: str(ref.snapshot_id) for name, ref in table.metadata.refs.items()})` at the end of the editor and run again. Which IDs do `main` and `report-close` select?',
 'What does a tag do here?', ['Names a fixed snapshot','Copies every data file into a new table','Automatically follows the newest append'] ),
 lesson('delete-tradeoff',4,'Compare delete strategies',
 'Model the read/write tradeoff of copy-on-write and merge-on-read.',
-'A workload changes a small fraction of rows in large files. Different engines and table versions support different delete mechanisms.',
+'Copy-on-write replaces affected data files when rows change. Merge-on-read instead writes deletion information that readers apply later. This model compares part of the write and read cost of those two approaches.',
 'Which strategy shifts more work into subsequent reads?',
 `# Illustrative byte model, not a measured delete-file benchmark.
 affected_file_bytes = 128 * 1024 * 1024
@@ -468,11 +467,11 @@ show(costs)`,
 `assert costs['copy_on_write_write_bytes'] > costs['merge_on_read_delete_write_bytes']
 assert costs['merge_on_read_extra_delete_read_bytes'] > 0`,
 'The model gives merge-on-read a smaller immediate write but repeated delete-reading work. It omits lookup, CPU, caching and compaction. The runnable writer lessons use copy-on-write; this lesson does not generate delete files.',
-'Raise reads_before_rewrite. Explain why bytes alone do not establish a latency winner.',
+'Change `reads_before_rewrite` from `20` to `200` and run again. Which cost grows while the immediate write quantities stay fixed?',
 'Which must be verified before choosing a delete strategy?', ['Writer and reader support plus workload costs','Only the format’s feature list','Only the smallest immediate write'],0,{kind:'Cost model'}),
 lesson('compatibility',4,'Check the reader contract',
 'Separate table-format features from implementation support.',
-'A table is valid Iceberg but a downstream reader cannot handle its delete mechanism.',
+'Supporting an Iceberg format version does not establish support for every feature a table uses. This model compares declared requirements with two imaginary readers’ feature sets.',
 'Is format-version support alone enough to establish compatibility?',
 `# Explicit illustrative engine capability declarations.
 required = {'format-v2','position-deletes'}
@@ -483,7 +482,7 @@ show(missing)`,
 `assert missing['reader_a'] == []
 assert missing['reader_b'] == ['position-deletes']`,
 'The second reader lacks a required feature despite supporting v2. Production validation should test actual files and operations across pinned engines, catalogs and storage integrations. These names are illustrative, not vendor claims.',
-'Add a required transform and compare the capability sets.',
+'Add `\'day-transform\'` to the `required` set, leaving the reader sets unchanged, then run again. Which readers now lack a required feature?',
 'What is the strongest compatibility evidence?', ['A representative table read and operation test on pinned versions','A shared product category','A matching file extension'],0,{kind:'Compatibility model'}),
 lesson('discovery-access',5,'Discovery is not file access',
 'Find an access path that bypasses catalog discovery.',
@@ -496,11 +495,11 @@ can_read_known_path = permissions['read_object']
 show({'can_discover':can_discover,'can_read_known_path':can_read_known_path})`,
 `assert not can_discover and can_read_known_path`,
 'Catalog discovery is denied while direct object access is allowed. Production protection must account for storage permissions and credentials as well as catalog and engine policy.',
-'Revoke read_object and trace which paths remain available.',
+'Change `\'read_object\':True` to `\'read_object\':False` in `permissions` and run again. Which access path is now blocked?',
 'Where must a direct-file bypass be addressed?', ['At the storage and credential boundary','Only in the navigation menu','Only by renaming the table'],0,{kind:'Governance model'}),
 lesson('row-policy',5,'Test a row policy boundary',
-'Compare governed output with direct access to the same source.',
-'An EU analyst should see EU orders. Filtering a query demonstrates a policy’s intended result, not its enforcement.',
+'Distinguish a filtered result from protection of the source data.',
+'An EU analyst should see EU orders. This example filters a list to show the intended result, then compares it with direct access to the full source. No trusted access policy is installed.',
 'Will an application-side filter protect the underlying file?',
 `# A policy model over real data; not trusted enforcement.
 all_rows = table.scan().to_arrow().to_pylist()
@@ -509,7 +508,7 @@ show({'governed_rows':len(governed),'direct_source_rows':len(all_rows)})`,
 `assert len(governed) == 60
 assert len(all_rows) == 120`,
 'The filtered view returns 60 rows; direct source access returns 120. Real row-level policies require a trusted enforcement path and controls on bypass access. The browser is deliberately open to inspection.',
-'Apply a column projection and explain why omitting amount from the UI does not revoke access to it.',
+'Replace `row[\'region\'] == \'EU\'` with `row[\'region\'] == \'APAC\'` in the editor and run again. Does returning no governed rows remove access to the source?',
 'What does the filter establish?', ['The intended subset, not a trusted authorization boundary','That the raw data cannot be read','That every engine enforces the rule'],0,{kind:'Governance model'}),
 lesson('metadata-leak',5,'Inspect metadata exposure',
 'Locate information revealed before scanning data rows.',
@@ -525,11 +524,11 @@ show({'schema_names':schema_names,'file_path':entry.data_file.file_path,
 assert entry.data_file.record_count == 40
 assert entry.data_file.lower_bounds`,
 'Real manifests expose paths, counts and encoded bounds; metadata JSON exposes schema and references. These can reveal business information, so metadata access deserves an explicit policy too.',
-'Print upper_bounds and explain why the encoded bytes require the field’s type to interpret.',
+'Add `show({\'upper_bounds\':str(entry.data_file.upper_bounds)})` at the end of the editor and run again. Why would you also need the field types to interpret those bytes?',
 'What should a data access review include?', ['Metadata and statistics as well as data files','Only SQL result tables','Only catalog descriptions'] ),
 lesson('audit',5,'Make a query reproducible',
 'Capture an evidence record for a report.',
-'Audit needs to know which data state produced a result, not just when someone clicked Run.',
+'To reproduce a report after more data arrives, record the input state and query that produced it. A time stamp or table name alone does not identify those inputs.',
 'Is a table name alone enough to replay the report later?',
 `snapshot = table.current_snapshot().snapshot_id
 query = 'SELECT region, count(*) AS n FROM orders GROUP BY region ORDER BY region'
@@ -541,7 +540,7 @@ show(record)`,
 `assert record['snapshot_id'] == str(snapshot)
 assert sum(r['n'] for r in record['result']) == 120`,
 'The record binds the query to a snapshot, schema, metadata location and library version. It is useful evidence, but this local printout is not a tamper-resistant audit service. Real records also need identity, policy context and appropriate result handling.',
-'Append another batch, then replay the recorded snapshot query.',
+'Add `append(3)` followed by `show(sql(query, snapshot))` at the end of the editor and run again. Does the recorded state still return the original report after more data arrives?',
 'What still threatens future replay?', ['Expiring the snapshot or losing its referenced files','Adding newer snapshots by itself','Using an explicit snapshot ID'] ),
 lesson('erasure',5,'Trace an erasure obligation',
 'Identify remaining copies after a logical delete.',
@@ -555,7 +554,7 @@ show({'remaining_locations':remaining,'complete':not remaining})`,
 `assert 'retained_snapshot' in remaining
 assert len(remaining) == 4`,
 'Four locations still contain the data in this scenario. Retention policy, legal holds, backup treatment and deletion evidence must be resolved explicitly. Removing a snapshot reference does not prove physical erasure.',
-'Mark one copy as removed and check which obligations remain.',
+'Change `\'export\':True` to `\'export\':False` and run again. Which locations still need attention?',
 'What is the right completion evidence?', ['Verified treatment of all in-scope copies under the retention policy','A zero count in the latest snapshot alone','A successful DROP COLUMN alone'],0,{kind:'Governance model'}),
 lesson('retention-policy',5,'Resolve retention before cleanup',
 'Calculate which historical states must be preserved.',
@@ -569,11 +568,11 @@ eligible = [s['id'] for s in snapshots if s['age_days'] > cutoff_days and s['id'
 show({'protected':protected,'eligible':eligible})`,
 `assert eligible == []`,
 'No snapshot is eligible in this policy model. Age is only one condition. Production jobs must honor actual catalog references and configured retention semantics; legal holds are organizational controls, not an automatic Iceberg property.',
-'Remove the report tag from protected. Explain why file cleanup still needs reference analysis.',
+'On the line beginning `protected =`, replace the dictionary with `{\'s1\':\'legal hold\'}` and run again. Which old snapshot is now eligible under this model’s rules?',
 'What must be settled before destructive maintenance?', ['Retention requirements and protected references','Only the oldest timestamp','Only the largest file'],0,{kind:'Governance model'}),
 lesson('workload',6,'Choose a layout for two queries',
-'Compare competing predicates on the same physical layout.',
-'Your workload mixes region reports and order lookups. A layout should be evaluated against both.',
+'Compare two filters on the same file layout.',
+'Region reports and individual-order lookups ask different questions. Compare their selected files on one layout instead of judging it from a single query.',
 'Does the region layout prune equally well for both predicates?',
 `region_query = metrics("region = 'EU'")
 id_query = metrics('order_id = 1005')
@@ -581,11 +580,11 @@ show({'region_query':region_query,'id_query':id_query})`,
 `assert region_query['selected_files'] == 3
 assert id_query['selected_files'] == 2`,
 'The EU filter keeps three 20-row files. Bounds for order ID 1005 keep both region files from its batch because their ID ranges overlap. Always inspect actual statistics rather than assuming a partition key is the only pruning mechanism.',
-'Change the ID to 1006 and compare the result. Then try order_id >= 1000 AND order_id < 1040.',
+'Add `show(table.scan(row_filter=\'order_id = 1005\').count())` at the end of the editor and run again. Compare the matching row count with candidate_records for id_query.',
 'What should drive layout evaluation?', ['A representative mix of predicates and measured candidates','One favorite query alone','The largest number of partitions possible'],0,{setup:'reset(partitioned=True)'}),
 lesson('sort-layout',6,'Narrow bounds with ordering',
 'Compare file ranges for identical rows arranged differently.',
-'Two tables contain the same orders. One interleaves low and high IDs across files; the other groups adjacent IDs.',
+'The same orders are written into two layouts in turn. One spreads nearby order IDs across files; the other groups nearby IDs together. Both layouts have three files.',
 'Which layout should keep fewer files for order_id = 5?',
 `rows = table.scan().to_arrow().to_pylist()
 reset(batches=0)
@@ -602,12 +601,12 @@ show({'interleaved':interleaved,'clustered':clustered})`,
 `assert interleaved['selected_files'] == 3
 assert clustered['selected_files'] == 1
 assert table.scan().count() == 120`,
-'The interleaved files have overlapping ID ranges; grouping adjacent IDs narrows those ranges. Both contain identical rows and have three files. This lesson arranges writes explicitly; it does not declare or verify an Iceberg sort-order contract.',
-'Try a wide range predicate and compare how much of the advantage remains.',
+'The interleaved files have overlapping order-ID ranges, so all three may contain ID 5. Grouping nearby IDs narrows the ranges and leaves one candidate file. The rows and file count are unchanged. The code arranges these writes directly; it does not configure an Iceberg sort-order rule.',
+'Replace both `\'order_id = 5\'` conditions with `\'order_id >= 0\'` and run again. Does the clustered layout still let the planner exclude files for a filter matching every order?',
 'Why did grouping adjacent IDs help?', ['It made file bounds more selective','It created a primary-key index','It changed the logical result'] ),
 lesson('cost-budget',6,'Estimate request overhead',
-'Keep a cost model separate from measured browser execution.',
-'Even a small amount of data can cost time when it requires many serial requests.',
+'Calculate a request-cost estimate and state its assumptions.',
+'Reading the same amount of data from more files may require more requests. This model assumes those requests happen one after another, with a fixed delay for each one.',
 'What happens if the same bytes are spread over many more files?',
 `# Simplified serial-request estimate. Not measured cloud latency.
 request_ms = 20
@@ -618,7 +617,7 @@ estimates = {str(count):count*request_ms + bytes_to_read/throughput_bytes_per_ms
 show({'estimated_ms_by_file_count':estimates})`,
 `assert estimates['300'] > estimates['30'] > estimates['3']`,
 'This serial model makes request overhead dominate as file count grows. Real clients overlap requests, cache metadata and read ranges; object storage and engine behavior must be measured. These numbers are assumptions, not WASM measurements.',
-'Add a concurrency assumption and explain where dividing by concurrency becomes too optimistic.',
+'Change `request_ms` from `20` to `0` and run again. Do all three estimates become equal when the model ignores per-request overhead?',
 'How should the estimate be reported?', ['With its assumptions and a separate measured result','As a production latency guarantee','As elapsed browser time'],0,{kind:'Cost model'}),
 lesson('benchmark',6,'Hold the answer constant',
 'Validate correctness before comparing physical work.',
@@ -633,12 +632,12 @@ work_after = metrics()
 show({'same_answer':before == after,'before':work_before,'after':work_after,'answer':after})`,
 `assert before == after
 assert work_after['selected_files'] < work_before['selected_files']`,
-'The grouped counts and totals match while live file count falls from three to one. Correctness comes first. This fixture has exact integer-valued amounts in float columns; arbitrary floating-point workloads need appropriate comparison tolerances.',
-'Add min(order_id) and max(order_id) to strengthen the answer check.',
+'The grouped counts and totals match while live file count falls from three to one. Correctness comes first. This example has exact integer-valued amounts in float columns; arbitrary floating-point workloads need appropriate comparison tolerances.',
+'In query, replace `sum(amount) AS total` with `sum(amount) AS total, min(order_id) AS first_id, max(order_id) AS last_id`. Run again. Do these additional aggregates still match before and after?',
 'Which comparison is valid?', ['Equivalent results, controlled data, and explicitly defined work metrics','The fastest single run regardless of its answer','Different queries on different datasets'] ),
 lesson('incident',6,'Repair a fragmented workload',
-'Combine a rewrite, selective layout and correctness evidence.',
-'Twelve tiny commits feed a region dashboard. Your task is to reduce live files while preserving the table’s rows.',
+'Reduce the current file count and verify the grouped report is unchanged.',
+'A region dashboard reads a table built from 12 small writes. Consolidate its current files, then check that each region’s count and amount total are preserved.',
 'How many files would remain after one full rewrite of this unpartitioned table?',
 `before = metrics()
 answer_before = sql('SELECT region, count(*) AS n, sum(amount) AS total FROM orders GROUP BY region ORDER BY region')
@@ -650,7 +649,7 @@ show({'before':before,'after':after,'same_answer':answer_before == answer_after}
 assert before['selected_files'] == 12
 assert after['selected_files'] == 1`,
 'The rewrite consolidates twelve files into one and preserves the grouped answer. The original files remain for retained history. A production recommendation must also budget rewrite resources, ingestion contention and retention.',
-'Add identity(region) before the rewrite. Predict two live files and compare EU candidate records. The check expects one file, so explain why your valid experiment changes that target.',
+'Add `show(metrics("region = \'EU\'"))` at the end of the editor and run again. Does one unpartitioned file let the EU query avoid considering US rows?',
 'What remains after this repair?', ['Historical files and maintenance obligations','Proof of production throughput','Automatic organization-wide erasure'],0,{setup:'reset(batches=12)'}),
 lesson('recommendation',6,'Write a defensible recommendation',
 'Assemble a compact evidence record and state its limits.',
@@ -664,12 +663,12 @@ record = {
     'decision':'Evaluate region partitioning against the full workload',
     'risks':['more files','rewrite cost','retained history','reader compatibility'],
     'next_measurement':'Representative object-store request and scan traces',
-    'limits':'Browser-local fixture; no distributed throughput or trusted policy enforcement'
+    'limits':'Browser-local example; no distributed throughput or trusted policy enforcement'
 }
 show(record)`,
 `assert record['observed']['answer'][0]['n'] == 60
 assert record['risks'] and record['limits'] and record['next_measurement']`,
-'A defensible recommendation connects an observed workload and result to a conditional decision, risks, and the next measurement. Use Export warehouse to retain the real files from an experiment; save the evidence output separately with your query.',
-'Replace the decision with your own, citing the preceding experiments. Include the retention and access controls needed for deployment.',
-'Which claim follows directly from these lessons?', ['Measured file selection and table behavior on the pinned local fixture','A guaranteed production speedup','A verified enterprise security boundary'] )
+'The record connects observed counts and file-selection information to a proposed decision, its risks and a next measurement. A useful recommendation states which observations support it and which production tests could overturn it.',
+'Replace the `decision` and `next_measurement` strings in the record with your own recommendation and a test that could change your mind. Run again and check that your observations still support the wording.',
+'Which claim follows directly from these lessons?', ['Measured file selection and table behavior on the pinned local table','A guaranteed production speedup','A verified enterprise security boundary'] )
 ];

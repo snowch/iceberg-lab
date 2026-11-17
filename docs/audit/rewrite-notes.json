@@ -1,0 +1,380 @@
+{
+  "catalog": {
+    "title": "How a query finds its table",
+    "originalVariation": "Change the setup to reset(batches=1). Find what appears after the first append.",
+    "prepared": "An empty shop.orders table is prepared automatically. No orders have been added.",
+    "run": "Click Run experiment with the code unchanged. Find metadata, rows and data_files in the output.",
+    "change": "Add `append(0)` as the first line in the editor, then click Run experiment again. This adds 40 orders before the inspection. Which output values change?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "membership": {
+    "title": "A directory is not a table",
+    "originalVariation": "Give the extra file ten rows. Does the count change?",
+    "prepared": "The table already contains 120 orders in three data files. The example will also write a separate file without adding it to the table.",
+    "run": "Click Run experiment. Compare before and after, then check extra_exists.",
+    "change": "In the editor, replace `[99999]` with `list(range(10))`, then run again. The extra file now has ten rows. Does after change?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "metadata": {
+    "title": "Read the metadata JSON",
+    "originalVariation": "Print the snapshot-log and compare its entries with the snapshots array.",
+    "prepared": "The table has three completed appends, each adding 40 orders. Its current metadata file is ready to inspect.",
+    "run": "Click Run experiment. Read the current identifiers and the number of saved schema and snapshot definitions.",
+    "change": "Add `show(metadata['snapshot-log'])` at the end of the editor and run again. How many published state changes are listed?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "manifest-list": {
+    "title": "Open a manifest list",
+    "originalVariation": "Inspect the first snapshot’s list using table.metadata.snapshots[0].",
+    "prepared": "The table has three snapshots, one for each completed append. The example starts from the newest one.",
+    "run": "Click Run experiment. Follow the manifest_list path to the manifest paths printed beneath it.",
+    "change": "Replace `table.current_snapshot()` with `table.metadata.snapshots[0]` in the first line, then run again. Does the earliest state refer to fewer manifests?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "manifest": {
+    "title": "Read file entries",
+    "originalVariation": "Print entry.status and entry.snapshot_id alongside each path.",
+    "prepared": "The table contains three 40-row data files. Its manifests describe those files.",
+    "run": "Click Run experiment. Read each path and rows value, then compare their sum with manifest_records.",
+    "change": "In the entries.append dictionary, replace `'path':entry.data_file.file_path,` with `'path':entry.data_file.file_path, 'status':str(entry.status),`. Run again. What status is recorded for each entry?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "parquet-ids": {
+    "title": "Find identity in Parquet",
+    "originalVariation": "Compare those IDs with table.schema().fields.",
+    "prepared": "The table’s three columns are stored in Parquet files with Iceberg field IDs.",
+    "run": "Click Run experiment. Match each printed column name with its id.",
+    "change": "Add `show(str(table.schema()))` at the end of the editor and run again. Do the IDs in the table schema match the stored IDs?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "snapshots": {
+    "title": "Follow the snapshot history",
+    "originalVariation": "Append batch 3, then print the new chain.",
+    "prepared": "Three appends have already added 40 orders each. The example reads the resulting snapshot history.",
+    "run": "Click Run experiment. For the second and third entries, find the earlier id named by parent.",
+    "change": "Add `append(3)` as the first line in the editor and run again. How does the history change after a fourth append?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "time-travel": {
+    "title": "Read an earlier snapshot",
+    "originalVariation": "Read the second snapshot instead. Predict its count before running.",
+    "prepared": "The table has three saved states, containing 40, 80 and 120 orders.",
+    "run": "Click Run experiment. Compare n under then with n under now.",
+    "change": "Replace `snapshots[0]` with `snapshots[1]` in the first line and run again. Predict the new then count before looking at it.",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "immutable": {
+    "title": "Watch an append reuse files",
+    "originalVariation": "Append another distinct batch and compare the sets again.",
+    "prepared": "The table starts with three data files. The code will append 40 more orders and compare file paths.",
+    "run": "Click Run experiment. Compare reused, new and rows in the output.",
+    "change": "Insert `append(4)` immediately after `append(3)`, then run again. How many original paths are reused and how many new paths appear?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "rename": {
+    "title": "Rename without rewriting",
+    "originalVariation": "Inspect a Parquet schema after the rename. Its stored name is still region.",
+    "prepared": "The table has a region column with field ID 2. Its existing files will be read after a rename.",
+    "run": "Click Run experiment. Compare old_id, new_id and same_files, then read the grouped query result.",
+    "change": "Replace every `market` in the editor with `sales_region` and run again. Does another name change require different field IDs or files?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "add-column": {
+    "title": "Add an optional column",
+    "originalVariation": "Change the query to count rows WHERE priority IS NULL.",
+    "prepared": "The table contains 120 orders written before any priority column existed.",
+    "run": "Click Run experiment. Compare rows with populated.",
+    "change": "Inside the sql(...) call, replace the SQL string with `SELECT count(*) AS missing FROM orders WHERE priority IS NULL`, keeping the quotes around it. Then run again. Does missing account for all 120 orders?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "readd": {
+    "title": "A reused name is a new field",
+    "originalVariation": "Inspect the Parquet field ID for amount and compare it with the current schema.",
+    "prepared": "The existing amount column has field ID 3. The code will drop it and add a new column with the same name.",
+    "run": "Click Run experiment. Compare old_id with new_id and read populated.",
+    "change": "Replace `DoubleType()` with `StringType()` in the `add_column` call, then run again. Does changing the new column’s type reconnect it to the retired values?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "baseline": {
+    "title": "Measure the candidate scan",
+    "originalVariation": "Compare metrics(\"order_id = 0\") with the baseline to ask Iceberg to plan a filtered scan.",
+    "prepared": "The table has 120 orders in three files. The first calculation selects all files; the SQL query later returns one matching order.",
+    "run": "Click Run experiment. Compare candidate_records with returned.",
+    "change": "Add `show(metrics('order_id = 0'))` at the end of the editor and run again. Does supplying the filter to Iceberg change selected_files?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "bounds": {
+    "title": "Skip files with bounds",
+    "originalVariation": "Use order_id = 999999. Predict how many files survive.",
+    "prepared": "The three files contain order IDs 0–39, 1000–1039 and 2000–2039. The query looks for ID 1005.",
+    "run": "Click Run experiment. Compare all with pruned, then read the matching row printed last.",
+    "change": "Replace both occurrences of `1005` with `999999` in the editor and run again. How many files can contain that value?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "residual": {
+    "title": "Separate pruning from filtering",
+    "originalVariation": "Compare region = US and region = APAC.",
+    "prepared": "Each of the three files contains both EU and US orders. The query selects EU orders.",
+    "run": "Click Run experiment. Compare candidate_records under plan with matched_rows.",
+    "change": "Replace both `EU` values in the editor with `APAC` and run again. What happens when no file can contain the requested region?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "identity-partition": {
+    "title": "Partition for one predicate",
+    "originalVariation": "Compare an order_id predicate on this layout. Does partitioning help every query equally?",
+    "prepared": "The table is already partitioned by region: each of three appends wrote a separate EU file and US file.",
+    "run": "Click Run experiment. Compare total_files with selected_files for the EU condition.",
+    "change": "Replace `metrics(\"region = 'EU'\")` with `metrics('order_id = 1005')` in the editor, then run again. Does a filter on a different column select the same files?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "partition-evolution": {
+    "title": "Evolve the specification",
+    "originalVariation": "Append another batch and compare candidate records with total records.",
+    "prepared": "The existing three files are unpartitioned. The code will add region partitioning before writing another group of orders.",
+    "run": "Click Run experiment. Compare spec values in the file list, then read the EU scan counts.",
+    "change": "Insert `append(4)` immediately after `append(3)`, then run again. How many additional candidate records does the EU scan gain?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "hidden-transforms": {
+    "title": "Reason about hidden transforms",
+    "originalVariation": "Set end to exactly midnight. The half-open interval should keep only the first day.",
+    "prepared": "This Python model uses a time window from 23:30 to 00:30 on the following day. It does not write a partitioned Iceberg table.",
+    "run": "Click Run experiment. Read the candidate_days list for that time window.",
+    "change": "Replace `end = datetime(2026,1,2,0,30)` with `end = datetime(2026,1,2,0,0)`, then run again. How many days overlap the shorter window?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "small-files": {
+    "title": "Count the cost of tiny batches",
+    "originalVariation": "Try 24 one-row appends. Keep fixtures small enough for the browser.",
+    "prepared": "The code will create two fresh examples: 12 one-row appends, followed by one 12-row append. An append is one write that adds a group of rows to a table.",
+    "run": "Click Run experiment. Compare rows, files and snapshots under tiny and bulk.",
+    "change": "Replace `range(12)` with `range(24)` and `rows=12` with `rows=24`, then run again. How do the file counts compare at the new, equal row count?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "compact": {
+    "title": "Rewrite a fragmented table",
+    "originalVariation": "Compare selected_file_bytes before and after the rewrite. File count and compressed bytes need not fall by the same ratio.",
+    "prepared": "The table has three data files. The code will read all rows and write them into a new current state.",
+    "run": "Click Run experiment. Compare before_files and after_files, then read old_files_still_exist.",
+    "change": "Add `show(metrics())` immediately before the line starting with `table.overwrite`, and again at the end of the editor. Run again and compare `selected_file_bytes` as well as `selected_files`.",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "delete": {
+    "title": "Observe a copy-on-write delete",
+    "originalVariation": "Delete order_id >= 2000. Compare whole-file removal with a partial-file rewrite.",
+    "prepared": "The table has three files. Only one of them contains order 0, which the code will delete.",
+    "run": "Click Run experiment. Compare reused_files, new_files and rows.",
+    "change": "Replace `order_id = 0` with `order_id >= 2000` and run again. Does deleting every row in one file require writing a replacement file?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "deleted-history": {
+    "title": "Find deleted rows in history",
+    "originalVariation": "List the old snapshot’s files and check whether they still exist.",
+    "prepared": "The table contains order 0. The code saves the current snapshot ID, then deletes that order from the current table.",
+    "run": "Click Run experiment. Compare the n count under current with the n count under historical.",
+    "change": "Add `show([task.file.file_path for task in files(old)])` at the end of the editor and run again. Which files does the older snapshot still reference?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "expire": {
+    "title": "Expire a snapshot reference",
+    "originalVariation": "Inspect current rows after expiration. They remain unchanged.",
+    "prepared": "The table has three snapshots. The code will remove the oldest snapshot from the retained history.",
+    "run": "Click Run experiment. Compare remaining_snapshots with the physical Parquet file counts.",
+    "change": "Add `show(table.scan().count())` at the end of the editor and run again. Does removing the oldest snapshot change the current table’s 120 rows?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "orphans": {
+    "title": "Check every retained snapshot",
+    "originalVariation": "Inspect the first snapshot count to verify those files are still useful.",
+    "prepared": "The code will rewrite the table, leaving a new current file and older files used by retained snapshots.",
+    "run": "Click Run experiment. Compare current_files, retained_files and historical_only.",
+    "change": "Add `show(table.scan(snapshot_id=table.metadata.snapshots[0].snapshot_id).count())` at the end of the editor and run again. Can the first snapshot still read its rows?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "stale-commit": {
+    "title": "Reject a stale schema commit",
+    "originalVariation": "Swap the commit order and predict which column is present.",
+    "prepared": "Two table objects will load the same starting schema. The code prepares both schema changes before committing either one.",
+    "run": "Click Run experiment. Read the printed CommitFailedException and the final columns list.",
+    "change": "Swap `note_a` and `note_b` throughout the editor, then run again. Which column is now added by the first successful writer?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "retry": {
+    "title": "Reload before a compatible change",
+    "originalVariation": "Try adding source twice and inspect the validation error.",
+    "prepared": "Writer A will add note. Writer B will reload the table before adding the independent source column.",
+    "run": "Click Run experiment. Find note and source in the final list and compare their IDs.",
+    "change": "Replace `update.add_column('source',StringType())` with `update.add_column('note',StringType())` and run again. Read the error caused by trying to add an existing column; Reset code restores the original example.",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original passed; the suggested duplicate-column variation raised its expected error in pinned WASM."
+  },
+  "atomic-pointer": {
+    "title": "Publish one complete state",
+    "originalVariation": "Change expected to metadata-v0 to model a failed compare-and-swap.",
+    "prepared": "This model starts with a pointer to metadata-v1. A second metadata state and file-b are prepared but not yet published.",
+    "run": "Click Run experiment. Compare before_publish and after_publish with written_files.",
+    "change": "Replace `expected = 'metadata-v1'` with `expected = 'metadata-v0'`, then run again. Does the pointer change when the expected starting state is wrong?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "tags": {
+    "title": "Pin a reproducible report",
+    "originalVariation": "List table.metadata.refs and compare main with report-close.",
+    "prepared": "The table’s current snapshot contains 120 orders. The code will tag that state before adding another 40 orders.",
+    "run": "Click Run experiment. Compare tag_snapshot with current_snapshot and read pinned_rows.",
+    "change": "Add `show({name: str(ref.snapshot_id) for name, ref in table.metadata.refs.items()})` at the end of the editor and run again. Which IDs do `main` and `report-close` select?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "delete-tradeoff": {
+    "title": "Compare delete strategies",
+    "originalVariation": "Raise reads_before_rewrite. Explain why bytes alone do not establish a latency winner.",
+    "prepared": "This model compares rewriting one large data file with writing a much smaller set of delete records. It assumes 20 later reads.",
+    "run": "Click Run experiment. Compare the immediate write quantities with the extra delete-read quantity.",
+    "change": "Change `reads_before_rewrite` from `20` to `200` and run again. Which cost grows while the immediate write quantities stay fixed?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "compatibility": {
+    "title": "Check the reader contract",
+    "originalVariation": "Add a required transform and compare the capability sets.",
+    "prepared": "This model declares the features required by one table and the capabilities of two imaginary readers.",
+    "run": "Click Run experiment. Read the missing-feature list for each reader.",
+    "change": "Add `'day-transform'` to the `required` set, leaving the reader sets unchanged, then run again. Which readers now lack a required feature?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "discovery-access": {
+    "title": "Discovery is not file access",
+    "originalVariation": "Revoke read_object and trace which paths remain available.",
+    "prepared": "This permission model denies catalog listing but allows reads from a known storage path.",
+    "run": "Click Run experiment. Compare can_discover with can_read_known_path.",
+    "change": "Change `'read_object':True` to `'read_object':False` in `permissions` and run again. Which access path is now blocked?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "row-policy": {
+    "title": "Test a row policy boundary",
+    "originalVariation": "Apply a column projection and explain why omitting amount from the UI does not revoke access to it.",
+    "prepared": "The table contains 60 EU orders and 60 US orders. The code will filter a list for the EU analyst while retaining the unfiltered source.",
+    "run": "Click Run experiment. Compare governed_rows with direct_source_rows.",
+    "change": "Replace `row['region'] == 'EU'` with `row['region'] == 'APAC'` in the editor and run again. Does returning no governed rows remove access to the source?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "metadata-leak": {
+    "title": "Inspect metadata exposure",
+    "originalVariation": "Print upper_bounds and explain why the encoded bytes require the field’s type to interpret.",
+    "prepared": "The example will inspect the table schema and one manifest entry without reading the stored order rows.",
+    "run": "Click Run experiment. Identify the column names, file path, record count and presence of lower bounds.",
+    "change": "Add `show({'upper_bounds':str(entry.data_file.upper_bounds)})` at the end of the editor and run again. Why would you also need the field types to interpret those bytes?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "audit": {
+    "title": "Make a query reproducible",
+    "originalVariation": "Append another batch, then replay the recorded snapshot query.",
+    "prepared": "The example will run a grouped report against one snapshot and record which inputs it used.",
+    "run": "Click Run experiment. Find the query, snapshot_id, schema_id, software version and result in the printed record.",
+    "change": "Add `append(3)` followed by `show(sql(query, snapshot))` at the end of the editor and run again. Does the recorded state still return the original report after more data arrives?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "erasure": {
+    "title": "Trace an erasure obligation",
+    "originalVariation": "Mark one copy as removed and check which obligations remain.",
+    "prepared": "This inventory model marks the current-table copy as removed and four other locations as still containing the data.",
+    "run": "Click Run experiment. Read remaining_locations and complete.",
+    "change": "Change `'export':True` to `'export':False` and run again. Which locations still need attention?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "retention-policy": {
+    "title": "Resolve retention before cleanup",
+    "originalVariation": "Remove the report tag from protected. Explain why file cleanup still needs reference analysis.",
+    "prepared": "This policy model has three snapshot ages, a 30-day cutoff and two protected snapshots.",
+    "run": "Click Run experiment. Read protected and eligible together.",
+    "change": "On the line beginning `protected =`, replace the dictionary with `{'s1':'legal hold'}` and run again. Which old snapshot is now eligible under this model’s rules?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "workload": {
+    "title": "Choose a layout for two queries",
+    "originalVariation": "Change the ID to 1006 and compare the result. Then try order_id >= 1000 AND order_id < 1040.",
+    "prepared": "The table already has separate EU and US files for each of three appends. The code will plan two filters on that same layout.",
+    "run": "Click Run experiment. Compare selected_files and candidate_records under region_query and id_query.",
+    "change": "Add `show(table.scan(row_filter='order_id = 1005').count())` at the end of the editor and run again. Compare the matching row count with candidate_records for id_query.",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "sort-layout": {
+    "title": "Narrow bounds with ordering",
+    "originalVariation": "Try a wide range predicate and compare how much of the advantage remains.",
+    "prepared": "The code will write the same 120 orders into two layouts in turn. Both layouts have three files.",
+    "run": "Click Run experiment. Compare selected_files under interleaved and clustered for order ID 5.",
+    "change": "Replace both `'order_id = 5'` conditions with `'order_id >= 0'` and run again. Does the clustered layout still let the planner exclude files for a filter matching every order?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "cost-budget": {
+    "title": "Estimate request overhead",
+    "originalVariation": "Add a concurrency assumption and explain where dividing by concurrency becomes too optimistic.",
+    "prepared": "This model holds the byte count and transfer rate fixed, and assumes requests happen one after another.",
+    "run": "Click Run experiment. Compare the estimated times for 3, 30 and 300 files.",
+    "change": "Change `request_ms` from `20` to `0` and run again. Do all three estimates become equal when the model ignores per-request overhead?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "benchmark": {
+    "title": "Hold the answer constant",
+    "originalVariation": "Add min(order_id) and max(order_id) to strengthen the answer check.",
+    "prepared": "The code will record a grouped report, rewrite the table and repeat the same report.",
+    "run": "Click Run experiment. Read same_answer, the grouped answer and the two file-selection summaries.",
+    "change": "In query, replace `sum(amount) AS total` with `sum(amount) AS total, min(order_id) AS first_id, max(order_id) AS last_id`. Run again. Do these additional aggregates still match before and after?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "incident": {
+    "title": "Repair a fragmented workload",
+    "originalVariation": "Add identity(region) before the rewrite. Predict two live files and compare EU candidate records. The check expects one file, so explain why your valid experiment changes that target.",
+    "prepared": "The table starts with 12 data files, each from a separate append of 40 orders. The code will consolidate them.",
+    "run": "Click Run experiment. Compare selected_files under before and after, then read same_answer.",
+    "change": "Add `show(metrics(\"region = 'EU'\"))` at the end of the editor and run again. Does one unpartitioned file let the EU query avoid considering US rows?",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  },
+  "recommendation": {
+    "title": "Write a defensible recommendation",
+    "originalVariation": "Replace the decision with your own, citing the preceding experiments. Include the retention and access controls needed for deployment.",
+    "prepared": "The example will assemble a recommendation record for an EU-region dashboard using the local table’s results.",
+    "run": "Click Run experiment. Read the observed result and plan before judging the proposed decision.",
+    "change": "Replace the `decision` and `next_measurement` strings in the record with your own recommendation and a test that could change your mind. Run again and check that your observations still support the wording.",
+    "reason": "Make the prepared state explicit; give a direct run/inspection action and an edit that can be made in the editor.",
+    "verified": "Original and suggested variation passed their checks in pinned WASM."
+  }
+}

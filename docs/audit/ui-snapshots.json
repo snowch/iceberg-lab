@@ -1,0 +1,678 @@
+{
+  "before": {
+    "overview": {
+      "detailCounts": {
+        "total": 0,
+        "topLevel": 0,
+        "labels": []
+      },
+      "paragraphs": [
+        "The browser field guide  / Apache Iceberg",
+        "Understand the table.See what changes.",
+        "Follow the files. Read less data. Change a table safely. Learn Iceberg through small experiments with real tables, running entirely in your browser.",
+        "Start the first lesson →Explore your laboratory",
+        "42 focused lessonsAbout 5 minutes eachNo setup or accountLocal WASM execution",
+        "A SIMPLE QUERY. A DEEPER STRUCTURE.Files · metadata · snapshots · safe change",
+        "One table. A chain of evidence.",
+        "CatalogFind the table→",
+        "MetadataChoose a state→",
+        "Manifest listFind manifests→",
+        "ManifestsSelect files→",
+        "Data filesRead the rows",
+        "Before you startThis course is for people who work with tables and want to explain how an Iceberg table behaves. Be familiar with rows and columns. For the experiments, you should be able to read basic SQL (SELECT, WHERE, GROUP BY) and short Python examples using function calls, lists, dictionaries and loops.No prior Iceberg, Spark, Java or cloud-platform knowledge is required. Knowing that Parquet stores tabular data in files is helpful; its byte-level details are optional. You can also follow the diagrams, worked explanations and transcripts without running code.Read the laboratory guide →",
+        "Choose your way inStart at the beginning, or follow your next question.01 / 12 lessonsUnderstand the format →Follow a table from its name to its bytes, then change its schema.Sections 01 · 0202 / 18 lessonsDesign for a workload →Measure pruning, repair fragmentation and defend a layout.Sections 03 · 04 · 0703 / 18 lessonsOperate with confidence →Investigate commit conflicts, retained history and access boundaries.Sections 04 · 05 · 06Every lesson starts with fresh data. If a term is unfamiliar, use “The idea” and the optional hints before running code.",
+        "From a file to a governed tableSeven sections. One idea per lesson.",
+        "PART 01 / 6 LESSONSFind the tableFollow the metadata to real files.01How a query finds its table →02A directory is not a table →03Read the metadata JSON →04Open a manifest list →05Read file entries →06Find identity in Parquet →0 of 6 reviewedPART 02 / 6 LESSONSChange without losing identitySnapshots, history and schema evolution.07Trace snapshot ancestry →08Read an earlier snapshot →09Watch an append reuse files →10Rename without rewriting →11Add an optional column →12A reused name is a new field →0 of 6 reviewedPART 03 / 6 LESSONSRead lessChoose layouts and inspect pruning.13Measure the candidate scan →14Skip files with bounds →15Separate pruning from filtering →16Partition for one predicate →17Evolve the specification →18Reason about hidden transforms →0 of 6 reviewedPART 04 / 6 LESSONSMaintain the warehouseSmall files, deletes and retained history.19Count the cost of tiny batches →20Rewrite a fragmented table →21Observe a copy-on-write delete →22Find deleted rows in history →23Expire a snapshot reference →24Check every retained snapshot →0 of 6 reviewedPART 05 / 6 LESSONSCommit safelyConcurrency, references and compatibility.25Reject a stale schema commit →26Rebase a compatible change →27Publish one complete state →28Pin a reproducible report →29Compare delete strategies →30Check the reader contract →0 of 6 reviewedPART 06 / 6 LESSONSGovern the whole pathAccess, audit and deletion boundaries.31Discovery is not file access →32Test a row policy boundary →33Inspect metadata exposure →34Make a query reproducible →35Trace an erasure obligation →36Resolve retention before cleanup →0 of 6 reviewedPART 07 / 6 LESSONSDesign with evidenceWorkload tradeoffs and a final investigation.37Choose a layout for two queries →38Narrow bounds with ordering →39Estimate request overhead →40Hold the answer constant →41Repair a fragmented workload →42Write a defensible recommendation →0 of 6 reviewed",
+        "Learn by investigating. Make a prediction, run the experiment, inspect the evidence, then change one thing. Every lesson has a worked explanation, so you can read first and run when ready.",
+        "Know basic SQL and a little Python. The Parquet lab explains the file beneath the table; the Query Engine lab follows the work above it. You can start here without completing either."
+      ]
+    },
+    "#guide": {
+      "detailCounts": {
+        "total": 0,
+        "topLevel": 0,
+        "labels": []
+      },
+      "paragraphs": [
+        "Reference / Your laboratoryA real table.Inside your tab.",
+        "The page downloads a Python WASM runtime on your first experiment. PyIceberg creates the table, Arrow writes the files, and DuckDB runs SQL locally.",
+        "Prerequisites and reading pathsStart with familiarity with tables, rows and columns. To investigate by editing code, be able to read basic SQL SELECT, WHERE and GROUP BY statements and short Python examples with function calls, lists, dictionaries and loops. This is an Iceberg course, not a first course in SQL or Python.You do not need Iceberg, Spark, Java, a cloud account or object-storage administration experience. Knowing what a Parquet file is will help; understanding its binary format is optional. The Parquet lab is a companion, not a required prerequisite.For a reading path, use the concept diagrams and worked explanations, then explain each mechanism in your own words. Optional captioned videos and transcripts cover selected processes. Experiment checks provide evidence about the code; they do not certify mastery merely for pressing Run.",
+        "How a lesson worksEach lesson asks one question. Predict the outcome, run the editable Python, inspect its output and the warehouse, then compare it with the worked result. Try the suggested variation and answer the explanation check.Use the optional prediction and reflection notes to record your reasoning. They are saved only in this browser. Hints offer a starting point before revealing what evidence to inspect. Each section ends with an unfamiliar scenario and a self-review rubric; use it to test transfer rather than recognition.Every run recreates that lesson’s fixture. It does not continue the previous run or previous lesson. Your code edits and review progress are saved in this browser when storage is available. The warehouse itself is held in worker memory and is lost on reload, stopping the runtime, or starting another experiment.Use Mark reviewed to track a reading path. It is a personal bookmark, not a certificate. Passing the original code check and the explanation question also marks the lesson reviewed. Variations may deliberately fail the original check; inspect the result and explain why.",
+        "What actually runsLayerPinned implementation",
+        "InterpreterPyodide 314.0.3, in a Web WorkerTable libraryPyIceberg 0.11.1 · format v2 fixturesCatalogPyIceberg SqlCatalog on local SQLiteFilesReal metadata JSON, Avro manifests and ParquetData / SQLPyArrow 22.0.0 / DuckDB 1.5.1Data120 synthetic orders in the default fixture; no personal data",
+        "Self-hosted runtime assets cost roughly 46 MB uncompressed on first load. Browser caching and compression affect actual transfer. Startup may take tens of seconds. Nothing is downloaded for computation until you select Run. Static lesson assets load normally.",
+        "There are no cloud credentials, remote catalog services, query servers or analytics trackers. After runtime assets load, experiments require no network services. This is not an offline-installed application; navigation after a full offline reload depends on the browser cache.",
+        "Read the evidence correctlyReal Iceberg means the operation uses PyIceberg and real table files.Model labels mean an explicit teaching calculation or policy scenario. These do not demonstrate distributed services or production enforcement.Candidate records are rows in selected files, not necessarily rows examined by every downstream operator.Selected file bytes sum file sizes; they are not measured bytes read, HTTP traffic or billing.Elapsed time includes fixture setup, the example and its check in the worker. It is not an isolated query benchmark.",
+        "The SQL helper first materializes an Iceberg scan as Arrow and then registers it with DuckDB. SQL WHERE clauses do not feed predicates back into the Iceberg scan. Use table.scan(row_filter=...) or metrics(predicate) when investigating Iceberg pruning.",
+        "Runtime boundariesThis pinned build supports real identity partition writes, schema changes, snapshot reads, tags, copy-on-write deletes and metadata-only snapshot expiration. Day and bucket partition writes need a native helper absent from this WASM build. Merge-on-read delete files and distributed compaction are not implemented here.Small-table consolidation uses a full overwrite. Snapshot expiration removes references but does not physically delete files in this implementation. Concurrent commits use a sequential interleaving against the real SQLite catalog. This cannot measure distributed catalog behavior, conflict timing or cluster throughput.Two compatibility shims adapt upstream Python scheduling to a synchronous executor and reject unavailable S3 filesystem use. They do not implement or synthesize Iceberg metadata.Governance exercises expose intended access paths and failure modes. Code running under the learner’s control cannot provide trusted authorization, tamper-resistant audit or proof of regulatory compliance.",
+        "Vocabulary to keep nearbyTermMeaning in this lab",
+        "CatalogResolves a table name and coordinates publication of its current metadata.",
+        "SnapshotA table state identified by an ID, with references to its manifest list.",
+        "Manifest listAn Avro file listing manifests and summaries for one snapshot.",
+        "ManifestAn Avro file containing data-file or delete-file entries and their metrics.",
+        "Field IDA stable identity for a column, independent of its current name or position.",
+        "Partition specificationSource fields and transforms used to partition files. Old files retain the spec that wrote them.",
+        "PruningRuling out files or other units that cannot contain matching data.",
+        "Residual predicateThe condition still needing evaluation after coarse metadata decisions.",
+        "Copy-on-writeReplacing affected data files to apply row changes.",
+        "Merge-on-readCombining data with supported row-delete information during reads.",
+        "CompactionRewriting data into a more useful physical layout while preserving its logical contents.",
+        "ExpirationRemoving eligible snapshot history from current table metadata; physical cleanup is a separate concern here.",
+        "Orphan fileA file no longer referenced by the relevant table state and retention graph. Age and in-flight writes matter before removal.",
+        "Optimistic concurrencyPreparing a change, then validating its requirements against current state at commit time.",
+        "Inspect and exportAfter a run, open the warehouse list to inspect actual JSON, Avro or Parquet metadata. Export warehouse downloads a ZIP containing the catalog and files, including retained historical data. It exports the most recent experiment in this worker. It does not persist that warehouse into the next lesson.Metadata contains absolute file:///warehouse/... paths. To reopen an export, extract at /warehouse in an isolated environment and use a compatible PyIceberg SqlCatalog with sqlite:////warehouse/catalog.db. Moving it elsewhere requires a deliberate path relocation; an arbitrary unzip location is not portable. The exported SQLite catalog is an instructional local catalog, not a REST catalog.Export evidence separately to save your code, fixture, check result and table state. No cloud upload is performed.",
+        "If something failsUse Stop / restart to terminate an experiment that is taking too long, then run again. This discards its in-memory warehouse. Reset code restores the original example. If the runtime cannot load, check access to this site’s static assets and available browser memory. Read the worked explanation while it loads; try a current desktop Chrome, Firefox or Safari.",
+        "Sources and further readingApache Iceberg table specificationPyIceberg documentationPyodide runtime documentationApache projects in the browser: Iceberg runtime investigation — source of the adapted compatibility shims and runtime packaging script.Chris Snow’s labs — focused investigations, worked explanations and evidence-led learning.",
+        "Start investigating →Course overview"
+      ]
+    },
+    "#lesson/catalog": {
+      "detailCounts": {
+        "total": 7,
+        "topLevel": 5,
+        "labels": [
+          "Need a starting point?",
+          "What evidence should I look for?",
+          "New to the code?",
+          "Fixture setup & evidence check",
+          "03 / Explain Compare with the worked result",
+          "▤ReferencesOfficial sources · reading question and answer comparison",
+          "Compare your explanation"
+        ]
+      },
+      "paragraphs": [
+        "Part 01 / Find the table",
+        "How a query finds its tableLESSON 01 / 42≈ 5 MINReal Iceberg",
+        "01 Predict02 Investigate03 Explain04 Apply",
+        "Why start here?Suppose your sales data lives in Parquet files. A file tells you what is inside it, but a folder listing cannot reliably tell you which files form the current table. What if a writer has uploaded new files but has not finished its change? Which version should a dashboard read?Apache Iceberg is a table format: it adds metadata that describes table states and the files belonging to them. This lets readers use a complete, published table state while writers prepare changes. To understand the performance, safe updates and governance decisions later in this course, we first need to follow how a query finds that state.The first step is the catalog, which maps a table name to its current metadata location. We begin with an empty table to make one distinction visible: a table can already have a name, schema (its columns and types) and metadata before it contains any data files.",
+        "Before you start: be familiar with tables, rows and columns. Basic SQL and reading short Python examples help with the experiments. Iceberg knowledge is not assumed. You can follow the worked explanations without running code. Prerequisites and laboratory guide.",
+        "Resolve a table name to its current metadata file.Imagine a sales dashboard querying shop.orders: orders is the table, and shop groups related tables. Before opening data files, the reader asks the catalog which metadata file describes that table now.",
+        "The ideaA table name is an address, not a container of rows. The catalog’s pointer tells a reader which metadata version is current.",
+        "01 / PredictMake a predictionWill creating a table create a data file?Your prediction and why · optional, saved here",
+        "02 / InvestigateRun the investigation",
+        "Need a starting point?Start with zero batches. Compare the metadata path with the number of data files.What evidence should I look for?Look for a metadata file alongside zero rows and zero data files.Each run starts fresh.",
+        "Runtime starts only when you run an experiment.",
+        "New to the code?table is the real Iceberg table prepared for this lesson. show(...) prints evidence. files() lists the planned data files, and metrics(...) summarizes a scan. You can run the example unchanged first, then edit one value. Each run recreates the fixture; nothing from an earlier lesson is required.sql(...) runs DuckDB over an already materialized Iceberg scan. To study Iceberg pruning, pass a predicate to metrics(...) or table.scan(row_filter=...). Read the laboratory guide for definitions and runtime limits.",
+        "experiment.py · editable PythonReset codeExperiment code",
+        "Run experiment →Stop / restartExport warehouse ↓Fresh fixture on every run · Ctrl / ⌘ + Enter",
+        "Fixture setup & evidence checkExecuted before your code; each run starts independently.The evidence check below runs after your code. Variations can legitimately change these expected results.Read the fixture helpers · Runtime & limits",
+        "03 / Explain Compare with the worked resultThe name resolves to a metadata JSON file. The empty table has a schema and a location but no data files or snapshots. Catalog state and data state are different layers.",
+        "A name leads to metadata before it leads to rowsLookupshop.ordersCatalog entryCurrent metadataData-file referencesAn empty table already has the first three layers. Its data-file reference set is empty.Fixed concept illustration · not a live experiment result",
+        "04 / ApplyTest your explanationChange the setup to reset(batches=1). Find what appears after the first append.",
+        "Explain what happenedWhat does the catalog resolve?A table name to its metadata locationA row ID to a byte offsetA SQL query to its final answerCheck explanation →",
+        "Explain it in your own wordsWhat did the evidence change about your prediction? Name one situation where this idea would help.",
+        "Track your reading even without running code.Mark reviewed",
+        "▤ReferencesOfficial sources · reading question and answer comparisonApache Iceberg specification · table metadataThe format specification defines table behavior. The runnable lab uses PyIceberg 0.11.1 and format-v2 fixtures; the current specification also covers newer versions. A feature in the specification is not a promise of support in this browser build.PyIceberg documentation · Inspect this lab’s pinned fixture and helpersInvestigate in the sourceWhich information exists before the first data file is written?Locate the relevant rule or boundary in the source. Explain it in your own words before opening the comparison.Compare your explanationA table name is an address, not a container of rows. The catalog’s pointer tells a reader which metadata version is current.An empty table already has the first three layers. Its data-file reference set is empty.",
+        "← Course overviewSee the learning pathNext lesson →A directory is not a table"
+      ]
+    },
+    "#lesson/bounds": {
+      "detailCounts": {
+        "total": 9,
+        "topLevel": 6,
+        "labels": [
+          "Need a starting point?",
+          "What evidence should I look for?",
+          "New to the code?",
+          "Fixture setup & evidence check",
+          "03 / Explain Compare with the worked result",
+          "▷Watch a predicate exclude files51 sec · Video, captions and transcript",
+          "Read the transcript",
+          "▤ReferencesOfficial sources · reading question and answer comparison",
+          "Compare your explanation"
+        ]
+      },
+      "paragraphs": [
+        "Part 03 / Read less",
+        "Skip files with boundsLESSON 14 / 42≈ 5 MINReal Iceberg",
+        "01 Predict02 Investigate03 Explain04 Apply",
+        "Pass a predicate to Iceberg and inspect file pruning.Order IDs arrive in disjoint ranges. A point lookup should eliminate unrelated files.",
+        "The ideaBounds are exclusion evidence. If a value cannot lie within a file’s range, the planner can safely skip that file.",
+        "01 / PredictMake a predictionWhich of the three files can contain order_id 1005?Your prediction and why · optional, saved here",
+        "02 / InvestigateRun the investigation",
+        "Need a starting point?Identify which batch range contains 1005. Then inspect selected_files.What evidence should I look for?Separate selected files, candidate records and matching rows.Each run starts fresh.",
+        "Runtime starts only when you run an experiment.",
+        "New to the code?table is the real Iceberg table prepared for this lesson. show(...) prints evidence. files() lists the planned data files, and metrics(...) summarizes a scan. You can run the example unchanged first, then edit one value. Each run recreates the fixture; nothing from an earlier lesson is required.sql(...) runs DuckDB over an already materialized Iceberg scan. To study Iceberg pruning, pass a predicate to metrics(...) or table.scan(row_filter=...). Read the laboratory guide for definitions and runtime limits.",
+        "experiment.py · editable PythonReset codeExperiment code",
+        "Run experiment →Stop / restartExport warehouse ↓Fresh fixture on every run · Ctrl / ⌘ + Enter",
+        "Fixture setup & evidence checkExecuted before your code; each run starts independently.The evidence check below runs after your code. Variations can legitimately change these expected results.Read the fixture helpers · Runtime & limits",
+        "03 / Explain Compare with the worked resultThe planner selects one 40-row file using bounds, then evaluates the row filter. The candidate count is larger than the one matching row. Selected file bytes are a size sum, not measured network traffic.",
+        "Exclude ranges that cannot contain the targetTarget: ID 10050–39: exclude1000–1039: keep2000–2039: excludeThen40 candidate rowsEvaluate row filter1 matching rowKeeping a range proves only that the target might occur there. It does not prove every row matches.Fixed concept illustration · not a live experiment result",
+        "04 / ApplyTest your explanationUse order_id = 999999. Predict how many files survive.",
+        "Explain what happenedWhat does a bound prove?Every value inside the range existsA matching file contains only matching rowsA file can be ruled out when its range cannot matchCheck explanation →",
+        "Explain it in your own wordsWhat did the evidence change about your prediction? Name one situation where this idea would help.",
+        "Track your reading even without running code.Mark reviewed",
+        "▷Watch a predicate exclude files51 sec · Video, captions and transcriptNarrated concept recap · synthetic voice · fixed illustration, not an experiment recording. Use fullscreen for diagram detail.If playback is unavailable, use the transcript below. Download the video (0.5 MB).Read the transcriptOne result can require much more workA query returning one order does not prove that the reader inspected one row. Iceberg first uses metadata to choose candidate files. Rows in a kept file can still fail the row filter.Test each file’s rangeThe fixture has three batches with disjoint order identifier ranges. For order one thousand and five, the ranges zero to thirty nine and two thousand to two thousand and thirty nine cannot match. Only the range one thousand to one thousand and thirty nine is kept.Keep pruning and filtering separateThe remaining file contains forty candidate records, but only one row matches. These are different quantities. Selected file bytes are a sum of file sizes, not measured network traffic. Run the experiment with an Iceberg row filter, then change the target to a value outside every range.▤ReferencesOfficial sources · reading question and answer comparisonApache Iceberg specification · scan planningThe format specification defines table behavior. The runnable lab uses PyIceberg 0.11.1 and format-v2 fixtures; the current specification also covers newer versions. A feature in the specification is not a promise of support in this browser build.PyIceberg documentation · Inspect this lab’s pinned fixture and helpersInvestigate in the sourceWhy does an inclusive file-selection test still require row filtering?Locate the relevant rule or boundary in the source. Explain it in your own words before opening the comparison.Compare your explanationBounds are exclusion evidence. If a value cannot lie within a file’s range, the planner can safely skip that file.Keeping a range proves only that the target might occur there. It does not prove every row matches.",
+        "← Previous lessonMeasure the candidate scanNext lesson →Separate pruning from filtering"
+      ]
+    },
+    "interaction/loading": {
+      "detailCounts": {
+        "total": 7,
+        "topLevel": 5,
+        "labels": [
+          "Need a starting point?",
+          "What evidence should I look for?",
+          "New to the code?",
+          "Fixture setup & evidence check",
+          "03 / Explain Compare with the worked result",
+          "▤ReferencesOfficial sources · reading question and answer comparison",
+          "Compare your explanation"
+        ]
+      },
+      "paragraphs": [
+        "Part 01 / Find the table",
+        "How a query finds its tableLESSON 01 / 42≈ 5 MINReal Iceberg",
+        "01 Predict02 Investigate03 Explain04 Apply",
+        "Why start here?Suppose your sales data lives in Parquet files. A file tells you what is inside it, but a folder listing cannot reliably tell you which files form the current table. What if a writer has uploaded new files but has not finished its change? Which version should a dashboard read?Apache Iceberg is a table format: it adds metadata that describes table states and the files belonging to them. This lets readers use a complete, published table state while writers prepare changes. To understand the performance, safe updates and governance decisions later in this course, we first need to follow how a query finds that state.The first step is the catalog, which maps a table name to its current metadata location. We begin with an empty table to make one distinction visible: a table can already have a name, schema (its columns and types) and metadata before it contains any data files.",
+        "Before you start: be familiar with tables, rows and columns. Basic SQL and reading short Python examples help with the experiments. Iceberg knowledge is not assumed. You can follow the worked explanations without running code. Prerequisites and laboratory guide.",
+        "Resolve a table name to its current metadata file.Imagine a sales dashboard querying shop.orders: orders is the table, and shop groups related tables. Before opening data files, the reader asks the catalog which metadata file describes that table now.",
+        "The ideaA table name is an address, not a container of rows. The catalog’s pointer tells a reader which metadata version is current.",
+        "01 / PredictMake a predictionWill creating a table create a data file?Your prediction and why · optional, saved here",
+        "02 / InvestigateRun the investigation",
+        "Need a starting point?Start with zero batches. Compare the metadata path with the number of data files.What evidence should I look for?Look for a metadata file alongside zero rows and zero data files.Each run starts fresh.",
+        "Loading Python WASM runtime…",
+        "New to the code?table is the real Iceberg table prepared for this lesson. show(...) prints evidence. files() lists the planned data files, and metrics(...) summarizes a scan. You can run the example unchanged first, then edit one value. Each run recreates the fixture; nothing from an earlier lesson is required.sql(...) runs DuckDB over an already materialized Iceberg scan. To study Iceberg pruning, pass a predicate to metrics(...) or table.scan(row_filter=...). Read the laboratory guide for definitions and runtime limits.",
+        "experiment.py · editable PythonReset codeExperiment code",
+        "Working…Stop / restartExport warehouse ↓Fresh fixture on every run · Ctrl / ⌘ + Enter",
+        "Fixture setup & evidence checkExecuted before your code; each run starts independently.The evidence check below runs after your code. Variations can legitimately change these expected results.Read the fixture helpers · Runtime & limits",
+        "03 / Explain Compare with the worked resultThe name resolves to a metadata JSON file. The empty table has a schema and a location but no data files or snapshots. Catalog state and data state are different layers.",
+        "A name leads to metadata before it leads to rowsLookupshop.ordersCatalog entryCurrent metadataData-file referencesAn empty table already has the first three layers. Its data-file reference set is empty.Fixed concept illustration · not a live experiment result",
+        "04 / ApplyTest your explanationChange the setup to reset(batches=1). Find what appears after the first append.",
+        "Explain what happenedWhat does the catalog resolve?A table name to its metadata locationA row ID to a byte offsetA SQL query to its final answerCheck explanation →",
+        "Explain it in your own wordsWhat did the evidence change about your prediction? Name one situation where this idea would help.",
+        "Track your reading even without running code.Mark reviewed",
+        "▤ReferencesOfficial sources · reading question and answer comparisonApache Iceberg specification · table metadataThe format specification defines table behavior. The runnable lab uses PyIceberg 0.11.1 and format-v2 fixtures; the current specification also covers newer versions. A feature in the specification is not a promise of support in this browser build.PyIceberg documentation · Inspect this lab’s pinned fixture and helpersInvestigate in the sourceWhich information exists before the first data file is written?Locate the relevant rule or boundary in the source. Explain it in your own words before opening the comparison.Compare your explanationA table name is an address, not a container of rows. The catalog’s pointer tells a reader which metadata version is current.An empty table already has the first three layers. Its data-file reference set is empty.",
+        "← Course overviewSee the learning pathNext lesson →A directory is not a table"
+      ]
+    },
+    "interaction/original-result": {
+      "detailCounts": {
+        "total": 9,
+        "topLevel": 7,
+        "labels": [
+          "Need a starting point?",
+          "What evidence should I look for?",
+          "New to the code?",
+          "Fixture setup & evidence check",
+          "Snapshot history & current metadata",
+          "Inspect warehouse · 2 physical files",
+          "03 / Explain Compare with the worked result",
+          "▤ReferencesOfficial sources · reading question and answer comparison",
+          "Compare your explanation"
+        ]
+      },
+      "paragraphs": [
+        "Part 01 / Find the table",
+        "How a query finds its tableLESSON 01 / 42≈ 5 MINReal Iceberg",
+        "01 Predict02 Investigate03 Explain04 Apply",
+        "Why start here?Suppose your sales data lives in Parquet files. A file tells you what is inside it, but a folder listing cannot reliably tell you which files form the current table. What if a writer has uploaded new files but has not finished its change? Which version should a dashboard read?Apache Iceberg is a table format: it adds metadata that describes table states and the files belonging to them. This lets readers use a complete, published table state while writers prepare changes. To understand the performance, safe updates and governance decisions later in this course, we first need to follow how a query finds that state.The first step is the catalog, which maps a table name to its current metadata location. We begin with an empty table to make one distinction visible: a table can already have a name, schema (its columns and types) and metadata before it contains any data files.",
+        "Before you start: be familiar with tables, rows and columns. Basic SQL and reading short Python examples help with the experiments. Iceberg knowledge is not assumed. You can follow the worked explanations without running code. Prerequisites and laboratory guide.",
+        "Resolve a table name to its current metadata file.Imagine a sales dashboard querying shop.orders: orders is the table, and shop groups related tables. Before opening data files, the reader asks the catalog which metadata file describes that table now.",
+        "The ideaA table name is an address, not a container of rows. The catalog’s pointer tells a reader which metadata version is current.",
+        "01 / PredictMake a predictionWill creating a table create a data file?Your prediction and why · optional, saved here",
+        "02 / InvestigateRun the investigation",
+        "Need a starting point?Start with zero batches. Compare the metadata path with the number of data files.What evidence should I look for?Look for a metadata file alongside zero rows and zero data files.Each run starts fresh.",
+        "Ready · experiment completed locally",
+        "New to the code?table is the real Iceberg table prepared for this lesson. show(...) prints evidence. files() lists the planned data files, and metrics(...) summarizes a scan. You can run the example unchanged first, then edit one value. Each run recreates the fixture; nothing from an earlier lesson is required.sql(...) runs DuckDB over an already materialized Iceberg scan. To study Iceberg pruning, pass a predicate to metrics(...) or table.scan(row_filter=...). Read the laboratory guide for definitions and runtime limits.",
+        "experiment.py · editable PythonReset codeExperiment code",
+        "Run experiment →Stop / restartExport warehouse ↓Fresh fixture on every run · Ctrl / ⌘ + Enter",
+        "Fixture setup & evidence checkExecuted before your code; each run starts independently.The evidence check below runs after your code. Variations can legitimately change these expected results.Read the fixture helpers · Runtime & limits",
+        "Observed output3,575 ms · includes setup + check",
+        "Evidence check passed. Now explain why the result follows.Read the evidence: Look for a metadata file alongside zero rows and zero data files.",
+        "0Visible rows0Live data files0Retained snapshots0Current schema ID",
+        "Snapshot history & current metadata",
+        "Inspect warehouse · 2 physical filesIncludes current and retained files. Click a file to decode it in the worker. Available until the next run or restart.catalog.db (20,480 B)shop/orders/metadata/00000-16554f5a-9115-4610-a021-a073ab7a9ea3.metadata.json (743 B)",
+        "Export evidence ↓",
+        "03 / Explain Compare with the worked resultThe name resolves to a metadata JSON file. The empty table has a schema and a location but no data files or snapshots. Catalog state and data state are different layers.",
+        "A name leads to metadata before it leads to rowsLookupshop.ordersCatalog entryCurrent metadataData-file referencesAn empty table already has the first three layers. Its data-file reference set is empty.Fixed concept illustration · not a live experiment result",
+        "04 / ApplyTest your explanationChange the setup to reset(batches=1). Find what appears after the first append.",
+        "Explain what happenedWhat does the catalog resolve?A table name to its metadata locationA row ID to a byte offsetA SQL query to its final answerCheck explanation →",
+        "Explain it in your own wordsWhat did the evidence change about your prediction? Name one situation where this idea would help.",
+        "Track your reading even without running code.Mark reviewed",
+        "▤ReferencesOfficial sources · reading question and answer comparisonApache Iceberg specification · table metadataThe format specification defines table behavior. The runnable lab uses PyIceberg 0.11.1 and format-v2 fixtures; the current specification also covers newer versions. A feature in the specification is not a promise of support in this browser build.PyIceberg documentation · Inspect this lab’s pinned fixture and helpersInvestigate in the sourceWhich information exists before the first data file is written?Locate the relevant rule or boundary in the source. Explain it in your own words before opening the comparison.Compare your explanationA table name is an address, not a container of rows. The catalog’s pointer tells a reader which metadata version is current.An empty table already has the first three layers. Its data-file reference set is empty.",
+        "← Course overviewSee the learning pathNext lesson →A directory is not a table"
+      ]
+    },
+    "interaction/edited-result": {
+      "detailCounts": {
+        "total": 9,
+        "topLevel": 7,
+        "labels": [
+          "Need a starting point?",
+          "What evidence should I look for?",
+          "New to the code?",
+          "Fixture setup & evidence check",
+          "Snapshot history & current metadata",
+          "Inspect warehouse · 2 physical files",
+          "03 / Explain Compare with the worked result",
+          "▤ReferencesOfficial sources · reading question and answer comparison",
+          "Compare your explanation"
+        ]
+      },
+      "paragraphs": [
+        "Part 01 / Find the table",
+        "How a query finds its tableLESSON 01 / 42≈ 5 MINReal Iceberg",
+        "01 Predict02 Investigate03 Explain04 Apply",
+        "Why start here?Suppose your sales data lives in Parquet files. A file tells you what is inside it, but a folder listing cannot reliably tell you which files form the current table. What if a writer has uploaded new files but has not finished its change? Which version should a dashboard read?Apache Iceberg is a table format: it adds metadata that describes table states and the files belonging to them. This lets readers use a complete, published table state while writers prepare changes. To understand the performance, safe updates and governance decisions later in this course, we first need to follow how a query finds that state.The first step is the catalog, which maps a table name to its current metadata location. We begin with an empty table to make one distinction visible: a table can already have a name, schema (its columns and types) and metadata before it contains any data files.",
+        "Before you start: be familiar with tables, rows and columns. Basic SQL and reading short Python examples help with the experiments. Iceberg knowledge is not assumed. You can follow the worked explanations without running code. Prerequisites and laboratory guide.",
+        "Resolve a table name to its current metadata file.Imagine a sales dashboard querying shop.orders: orders is the table, and shop groups related tables. Before opening data files, the reader asks the catalog which metadata file describes that table now.",
+        "The ideaA table name is an address, not a container of rows. The catalog’s pointer tells a reader which metadata version is current.",
+        "01 / PredictMake a predictionWill creating a table create a data file?Your prediction and why · optional, saved here",
+        "02 / InvestigateRun the investigation",
+        "Need a starting point?Start with zero batches. Compare the metadata path with the number of data files.What evidence should I look for?Look for a metadata file alongside zero rows and zero data files.Each run starts fresh.",
+        "Ready · experiment completed locally",
+        "New to the code?table is the real Iceberg table prepared for this lesson. show(...) prints evidence. files() lists the planned data files, and metrics(...) summarizes a scan. You can run the example unchanged first, then edit one value. Each run recreates the fixture; nothing from an earlier lesson is required.sql(...) runs DuckDB over an already materialized Iceberg scan. To study Iceberg pruning, pass a predicate to metrics(...) or table.scan(row_filter=...). Read the laboratory guide for definitions and runtime limits.",
+        "experiment.py · editable PythonReset codeExperiment code",
+        "Run experiment →Stop / restartExport warehouse ↓Fresh fixture on every run · Ctrl / ⌘ + Enter",
+        "Fixture setup & evidence checkExecuted before your code; each run starts independently.The evidence check below runs after your code. Variations can legitimately change these expected results.Read the fixture helpers · Runtime & limits",
+        "Observed output39 ms · includes setup + check",
+        "Evidence check passed. Now explain why the result follows.Read the evidence: Look for a metadata file alongside zero rows and zero data files.",
+        "0Visible rows0Live data files0Retained snapshots0Current schema ID",
+        "Snapshot history & current metadata",
+        "Inspect warehouse · 2 physical filesIncludes current and retained files. Click a file to decode it in the worker. Available until the next run or restart.catalog.db (20,480 B)shop/orders/metadata/00000-f0e49bda-7f43-4d36-93a0-143433599dae.metadata.json (743 B)",
+        "Export evidence ↓",
+        "03 / Explain Compare with the worked resultThe name resolves to a metadata JSON file. The empty table has a schema and a location but no data files or snapshots. Catalog state and data state are different layers.",
+        "A name leads to metadata before it leads to rowsLookupshop.ordersCatalog entryCurrent metadataData-file referencesAn empty table already has the first three layers. Its data-file reference set is empty.Fixed concept illustration · not a live experiment result",
+        "04 / ApplyTest your explanationChange the setup to reset(batches=1). Find what appears after the first append.",
+        "Explain what happenedWhat does the catalog resolve?A table name to its metadata locationA row ID to a byte offsetA SQL query to its final answerCheck explanation →",
+        "Explain it in your own wordsWhat did the evidence change about your prediction? Name one situation where this idea would help.",
+        "Track your reading even without running code.Mark reviewed",
+        "▤ReferencesOfficial sources · reading question and answer comparisonApache Iceberg specification · table metadataThe format specification defines table behavior. The runnable lab uses PyIceberg 0.11.1 and format-v2 fixtures; the current specification also covers newer versions. A feature in the specification is not a promise of support in this browser build.PyIceberg documentation · Inspect this lab’s pinned fixture and helpersInvestigate in the sourceWhich information exists before the first data file is written?Locate the relevant rule or boundary in the source. Explain it in your own words before opening the comparison.Compare your explanationA table name is an address, not a container of rows. The catalog’s pointer tells a reader which metadata version is current.An empty table already has the first three layers. Its data-file reference set is empty.",
+        "← Course overviewSee the learning pathNext lesson →A directory is not a table"
+      ]
+    },
+    "interaction/error": {
+      "detailCounts": {
+        "total": 7,
+        "topLevel": 5,
+        "labels": [
+          "Need a starting point?",
+          "What evidence should I look for?",
+          "New to the code?",
+          "Fixture setup & evidence check",
+          "03 / Explain Compare with the worked result",
+          "▤ReferencesOfficial sources · reading question and answer comparison",
+          "Compare your explanation"
+        ]
+      },
+      "paragraphs": [
+        "Part 01 / Find the table",
+        "How a query finds its tableLESSON 01 / 42≈ 5 MINReal Iceberg",
+        "01 Predict02 Investigate03 Explain04 Apply",
+        "Why start here?Suppose your sales data lives in Parquet files. A file tells you what is inside it, but a folder listing cannot reliably tell you which files form the current table. What if a writer has uploaded new files but has not finished its change? Which version should a dashboard read?Apache Iceberg is a table format: it adds metadata that describes table states and the files belonging to them. This lets readers use a complete, published table state while writers prepare changes. To understand the performance, safe updates and governance decisions later in this course, we first need to follow how a query finds that state.The first step is the catalog, which maps a table name to its current metadata location. We begin with an empty table to make one distinction visible: a table can already have a name, schema (its columns and types) and metadata before it contains any data files.",
+        "Before you start: be familiar with tables, rows and columns. Basic SQL and reading short Python examples help with the experiments. Iceberg knowledge is not assumed. You can follow the worked explanations without running code. Prerequisites and laboratory guide.",
+        "Resolve a table name to its current metadata file.Imagine a sales dashboard querying shop.orders: orders is the table, and shop groups related tables. Before opening data files, the reader asks the catalog which metadata file describes that table now.",
+        "The ideaA table name is an address, not a container of rows. The catalog’s pointer tells a reader which metadata version is current.",
+        "01 / PredictMake a predictionWill creating a table create a data file?Your prediction and why · optional, saved here",
+        "02 / InvestigateRun the investigation",
+        "Need a starting point?Start with zero batches. Compare the metadata path with the number of data files.What evidence should I look for?Look for a metadata file alongside zero rows and zero data files.Each run starts fresh.",
+        "Experiment could not complete. Edit the code or stop / restart.",
+        "New to the code?table is the real Iceberg table prepared for this lesson. show(...) prints evidence. files() lists the planned data files, and metrics(...) summarizes a scan. You can run the example unchanged first, then edit one value. Each run recreates the fixture; nothing from an earlier lesson is required.sql(...) runs DuckDB over an already materialized Iceberg scan. To study Iceberg pruning, pass a predicate to metrics(...) or table.scan(row_filter=...). Read the laboratory guide for definitions and runtime limits.",
+        "experiment.py · editable PythonReset codeExperiment code",
+        "Run experiment →Stop / restartExport warehouse ↓Fresh fixture on every run · Ctrl / ⌘ + Enter",
+        "Fixture setup & evidence checkExecuted before your code; each run starts independently.The evidence check below runs after your code. Variations can legitimately change these expected results.Read the fixture helpers · Runtime & limits",
+        "Runtime error",
+        "03 / Explain Compare with the worked resultThe name resolves to a metadata JSON file. The empty table has a schema and a location but no data files or snapshots. Catalog state and data state are different layers.",
+        "A name leads to metadata before it leads to rowsLookupshop.ordersCatalog entryCurrent metadataData-file referencesAn empty table already has the first three layers. Its data-file reference set is empty.Fixed concept illustration · not a live experiment result",
+        "04 / ApplyTest your explanationChange the setup to reset(batches=1). Find what appears after the first append.",
+        "Explain what happenedWhat does the catalog resolve?A table name to its metadata locationA row ID to a byte offsetA SQL query to its final answerCheck explanation →",
+        "Explain it in your own wordsWhat did the evidence change about your prediction? Name one situation where this idea would help.",
+        "Track your reading even without running code.Mark reviewed",
+        "▤ReferencesOfficial sources · reading question and answer comparisonApache Iceberg specification · table metadataThe format specification defines table behavior. The runnable lab uses PyIceberg 0.11.1 and format-v2 fixtures; the current specification also covers newer versions. A feature in the specification is not a promise of support in this browser build.PyIceberg documentation · Inspect this lab’s pinned fixture and helpersInvestigate in the sourceWhich information exists before the first data file is written?Locate the relevant rule or boundary in the source. Explain it in your own words before opening the comparison.Compare your explanationA table name is an address, not a container of rows. The catalog’s pointer tells a reader which metadata version is current.An empty table already has the first three layers. Its data-file reference set is empty.",
+        "← Course overviewSee the learning pathNext lesson →A directory is not a table"
+      ]
+    },
+    "interaction/explanation-feedback": {
+      "detailCounts": {
+        "total": 7,
+        "topLevel": 5,
+        "labels": [
+          "Need a starting point?",
+          "What evidence should I look for?",
+          "New to the code?",
+          "Fixture setup & evidence check",
+          "03 / Explain Compare with the worked result",
+          "▤ReferencesOfficial sources · reading question and answer comparison",
+          "Compare your explanation"
+        ]
+      },
+      "paragraphs": [
+        "Part 01 / Find the table",
+        "How a query finds its tableLESSON 01 / 42≈ 5 MINReal Iceberg",
+        "01 Predict02 Investigate03 Explain04 Apply",
+        "Why start here?Suppose your sales data lives in Parquet files. A file tells you what is inside it, but a folder listing cannot reliably tell you which files form the current table. What if a writer has uploaded new files but has not finished its change? Which version should a dashboard read?Apache Iceberg is a table format: it adds metadata that describes table states and the files belonging to them. This lets readers use a complete, published table state while writers prepare changes. To understand the performance, safe updates and governance decisions later in this course, we first need to follow how a query finds that state.The first step is the catalog, which maps a table name to its current metadata location. We begin with an empty table to make one distinction visible: a table can already have a name, schema (its columns and types) and metadata before it contains any data files.",
+        "Before you start: be familiar with tables, rows and columns. Basic SQL and reading short Python examples help with the experiments. Iceberg knowledge is not assumed. You can follow the worked explanations without running code. Prerequisites and laboratory guide.",
+        "Resolve a table name to its current metadata file.Imagine a sales dashboard querying shop.orders: orders is the table, and shop groups related tables. Before opening data files, the reader asks the catalog which metadata file describes that table now.",
+        "The ideaA table name is an address, not a container of rows. The catalog’s pointer tells a reader which metadata version is current.",
+        "01 / PredictMake a predictionWill creating a table create a data file?Your prediction and why · optional, saved here",
+        "02 / InvestigateRun the investigation",
+        "Need a starting point?Start with zero batches. Compare the metadata path with the number of data files.What evidence should I look for?Look for a metadata file alongside zero rows and zero data files.Each run starts fresh.",
+        "Experiment could not complete. Edit the code or stop / restart.",
+        "New to the code?table is the real Iceberg table prepared for this lesson. show(...) prints evidence. files() lists the planned data files, and metrics(...) summarizes a scan. You can run the example unchanged first, then edit one value. Each run recreates the fixture; nothing from an earlier lesson is required.sql(...) runs DuckDB over an already materialized Iceberg scan. To study Iceberg pruning, pass a predicate to metrics(...) or table.scan(row_filter=...). Read the laboratory guide for definitions and runtime limits.",
+        "experiment.py · editable PythonReset codeExperiment code",
+        "Run experiment →Stop / restartExport warehouse ↓Fresh fixture on every run · Ctrl / ⌘ + Enter",
+        "Fixture setup & evidence checkExecuted before your code; each run starts independently.The evidence check below runs after your code. Variations can legitimately change these expected results.Read the fixture helpers · Runtime & limits",
+        "Runtime error",
+        "03 / Explain Compare with the worked resultThe name resolves to a metadata JSON file. The empty table has a schema and a location but no data files or snapshots. Catalog state and data state are different layers.",
+        "A name leads to metadata before it leads to rowsLookupshop.ordersCatalog entryCurrent metadataData-file referencesAn empty table already has the first three layers. Its data-file reference set is empty.Fixed concept illustration · not a live experiment result",
+        "04 / ApplyTest your explanationChange the setup to reset(batches=1). Find what appears after the first append.",
+        "Explain what happenedWhat does the catalog resolve?A table name to its metadata locationA row ID to a byte offsetA SQL query to its final answerCheck explanation →Try again using this evidence: Look for a metadata file alongside zero rows and zero data files. Open the worked result if you need the full explanation.",
+        "Explain it in your own wordsWhat did the evidence change about your prediction? Name one situation where this idea would help.",
+        "Track your reading even without running code.Mark reviewed",
+        "▤ReferencesOfficial sources · reading question and answer comparisonApache Iceberg specification · table metadataThe format specification defines table behavior. The runnable lab uses PyIceberg 0.11.1 and format-v2 fixtures; the current specification also covers newer versions. A feature in the specification is not a promise of support in this browser build.PyIceberg documentation · Inspect this lab’s pinned fixture and helpersInvestigate in the sourceWhich information exists before the first data file is written?Locate the relevant rule or boundary in the source. Explain it in your own words before opening the comparison.Compare your explanationA table name is an address, not a container of rows. The catalog’s pointer tells a reader which metadata version is current.An empty table already has the first three layers. Its data-file reference set is empty.",
+        "← Course overviewSee the learning pathNext lesson →A directory is not a table"
+      ]
+    }
+  },
+  "after": {
+    "overview": {
+      "detailCounts": {
+        "total": 0,
+        "topLevel": 0,
+        "labels": []
+      },
+      "paragraphs": [
+        "The browser field guide  / Apache Iceberg",
+        "Understand the table.See what changes.",
+        "Follow the files. Read less data. Change a table safely. Learn Iceberg through small experiments with real tables, running entirely in your browser.",
+        "Start the first lesson →Explore your laboratory",
+        "42 focused lessonsAbout 5 minutes eachNo setup or accountRuns in your browser",
+        "A SIMPLE QUERY. A DEEPER STRUCTURE.Files · metadata · snapshots · safe change",
+        "One table. A chain of evidence.",
+        "CatalogFind the table→",
+        "MetadataChoose a state→",
+        "Manifest listFind manifests→",
+        "ManifestsSelect files→",
+        "Data filesRead the rows",
+        "Before you startThis course is for people who work with tables and want to explain how an Iceberg table behaves. Be familiar with rows and columns. For the experiments, you should be able to read basic SQL (SELECT, WHERE, GROUP BY) and short Python examples using function calls, lists, dictionaries and loops.No prior Iceberg, Spark, Java or cloud-platform knowledge is required. Knowing that Parquet stores tabular data in files is helpful; its byte-level details are optional. You can also follow the diagrams, worked explanations and transcripts without running code.Read the laboratory guide →",
+        "Choose your way inStart at the beginning, or follow your next question.01 / 12 lessonsUnderstand the format →Follow a table from its name to its bytes, then change its schema.Sections 01 · 0202 / 18 lessonsDesign for a workload →Measure pruning, repair fragmentation and defend a layout.Sections 03 · 04 · 0703 / 18 lessonsOperate with confidence →Investigate commit conflicts, retained history and access boundaries.Sections 04 · 05 · 06Every lesson starts with fresh data. If a term is unfamiliar, read the lesson’s opening explanation and “What the result means”.",
+        "From a file to a governed tableSeven sections. One idea per lesson.",
+        "PART 01 / 6 LESSONSFind the tableFollow the metadata to real files.01How a query finds its table →02A directory is not a table →03Read the metadata JSON →04Open a manifest list →05Read file entries →06Find identity in Parquet →0 of 6 reviewedPART 02 / 6 LESSONSChange without losing identitySnapshots, history and schema evolution.07Follow the snapshot history →08Read an earlier snapshot →09Watch an append reuse files →10Rename without rewriting →11Add an optional column →12A reused name is a new field →0 of 6 reviewedPART 03 / 6 LESSONSRead lessChoose layouts and inspect pruning.13Measure the candidate scan →14Skip files with bounds →15Separate pruning from filtering →16Partition for one predicate →17Evolve the specification →18Reason about hidden transforms →0 of 6 reviewedPART 04 / 6 LESSONSMaintain the warehouseSmall files, deletes and retained history.19Count the cost of tiny batches →20Rewrite a fragmented table →21Observe a copy-on-write delete →22Find deleted rows in history →23Expire a snapshot reference →24Check every retained snapshot →0 of 6 reviewedPART 05 / 6 LESSONSCommit safelyConcurrency, references and compatibility.25Reject a stale schema commit →26Reload before a compatible change →27Publish one complete state →28Pin a reproducible report →29Compare delete strategies →30Check the reader contract →0 of 6 reviewedPART 06 / 6 LESSONSGovern the whole pathAccess, audit and deletion boundaries.31Discovery is not file access →32Test a row policy boundary →33Inspect metadata exposure →34Make a query reproducible →35Trace an erasure obligation →36Resolve retention before cleanup →0 of 6 reviewedPART 07 / 6 LESSONSDesign with evidenceWorkload tradeoffs and a final investigation.37Choose a layout for two queries →38Narrow bounds with ordering →39Estimate request overhead →40Hold the answer constant →41Repair a fragmented workload →42Write a defensible recommendation →0 of 6 reviewed",
+        "Learn by investigating. Make a prediction, run the experiment, inspect the evidence, then change one thing. Every lesson has a worked explanation, so you can read first and run when ready.",
+        "For more background, the Parquet lab explains the file beneath the table; the Query Engine lab follows the work above it. You can start here without completing either."
+      ]
+    },
+    "#guide": {
+      "detailCounts": {
+        "total": 0,
+        "topLevel": 0,
+        "labels": []
+      },
+      "paragraphs": [
+        "Reference / Your laboratoryA real table.Inside your tab.",
+        "The page downloads a Python WASM runtime on your first experiment. PyIceberg creates the table, Arrow writes the files, and DuckDB runs SQL locally.",
+        "Prerequisites and reading pathsStart with familiarity with tables, rows and columns. To investigate by editing code, be able to read basic SQL SELECT, WHERE and GROUP BY statements and short Python examples with function calls, lists, dictionaries and loops. This is an Iceberg course, not a first course in SQL or Python.You do not need Iceberg, Spark, Java, a cloud account or object-storage administration experience. Knowing what a Parquet file is will help; understanding its binary format is optional. The Parquet lab is a companion, not a required prerequisite.For a reading path, use the concept diagrams and worked explanations, then explain each mechanism in your own words. Optional captioned videos and transcripts cover selected processes. Experiment checks provide evidence about the code; they do not certify mastery merely for pressing Run.",
+        "How a lesson worksEach lesson asks one question. Predict the outcome, run the editable Python, inspect its output and the warehouse, then compare it with the worked result. Try the suggested variation and answer the explanation check.Use Your notes if you want to save a prediction and explanation. They are saved only in this browser. Each example states what the page prepares automatically, what to run and which output values to inspect. Each section ends with an unfamiliar scenario and a self-review rubric; try answering it without looking back, then use the checklist to review your reasoning.Every run recreates that lesson’s starting table or model. It does not continue the previous run or previous lesson. Your code edits and review progress are saved in this browser when storage is available. The warehouse itself is held in worker memory and is lost on reload, stopping the runtime, or starting another experiment.Use Mark reviewed to track a reading path. It is a personal bookmark, not a certificate. Passing the original code check and the explanation question also marks the lesson reviewed. Edited examples can produce valid results that differ from the original checks. They are labelled as edited runs rather than graded as failures.",
+        "What actually runsLayerPinned implementation",
+        "InterpreterPyodide 314.0.3, in a Web WorkerTable libraryPyIceberg 0.11.1 · format v2 examplesCatalogPyIceberg SqlCatalog on local SQLiteFilesReal metadata JSON, Avro manifests and ParquetData / SQLPyArrow 22.0.0 / DuckDB 1.5.1Data120 invented orders in the usual starting table; no personal data",
+        "Self-hosted runtime assets cost roughly 46 MB uncompressed on first load. Browser caching and compression affect actual transfer. Startup may take tens of seconds. Nothing is downloaded for computation until you select Run. Static lesson assets load normally.",
+        "There are no cloud credentials, remote catalog services, query servers or analytics trackers. After runtime assets load, experiments require no network services. This is not an offline-installed application; navigation after a full offline reload depends on the browser cache.",
+        "Read the evidence correctlyTable experiments use PyIceberg and real table files.Models are described as calculations or policy scenarios in their introductions. These do not demonstrate distributed services or production enforcement.Candidate records are rows in selected files, not necessarily rows examined by every downstream operator.Selected file bytes sum file sizes; they are not measured bytes read, HTTP traffic or billing.",
+        "The sql helper first reads the Iceberg scan into an Arrow table in memory, then makes that table available to DuckDB. SQL WHERE clauses do not feed predicates back into the Iceberg scan. Use table.scan(row_filter=...) or metrics(predicate) when investigating Iceberg pruning.",
+        "Runtime boundariesThis pinned build supports real identity partition writes, schema changes, snapshot reads, tags, copy-on-write deletes and metadata-only snapshot expiration. Day and bucket partition writes need a native helper absent from this WASM build. Merge-on-read delete files and distributed compaction are not implemented here.Small-table consolidation uses a full overwrite. Snapshot expiration removes references but does not physically delete files in this implementation. Concurrent commits use a sequential interleaving against the real SQLite catalog. This cannot measure distributed catalog behavior, conflict timing or cluster throughput.Two compatibility shims adapt upstream Python scheduling to a synchronous executor and reject unavailable S3 filesystem use. They do not implement or synthesize Iceberg metadata.Governance exercises expose intended access paths and failure modes. Code running under the learner’s control cannot provide trusted authorization, tamper-resistant audit or proof of regulatory compliance.",
+        "Vocabulary to keep nearbyTermMeaning in this lab",
+        "CatalogResolves a table name and coordinates publication of its current metadata.",
+        "SnapshotA table state identified by an ID, with references to its manifest list.",
+        "Manifest listAn Avro file listing manifests and summaries for one snapshot.",
+        "ManifestAn Avro file containing data-file or delete-file entries and their metrics.",
+        "Field IDA stable identity for a column, independent of its current name or position.",
+        "Partition specificationSource fields and transforms used to partition files. Old files retain the spec that wrote them.",
+        "PruningRuling out files or other units that cannot contain matching data.",
+        "Residual predicateThe row condition that still needs to be tested inside the files a planner has selected.",
+        "Copy-on-writeReplacing affected data files to apply row changes.",
+        "Merge-on-readCombining data with supported row-delete information during reads.",
+        "CompactionRewriting data into a more useful physical layout while preserving its logical contents.",
+        "ExpirationRemoving eligible snapshot history from current table metadata; physical cleanup is a separate concern here.",
+        "Orphan fileA file not referenced by any table state that must be retained. Cleanup must also account for writes still in progress and a safe minimum file age.",
+        "Optimistic concurrencyPreparing a change, then validating its requirements against current state at commit time.",
+        "Inspect and exportAfter a run, open Code, files and checks and select a file under Files on disk to read its JSON, Avro or Parquet metadata. Export warehouse downloads a ZIP containing the catalog and files, including retained historical data. It exports the most recent experiment in this worker. It does not persist that warehouse into the next lesson.Metadata contains absolute file:///warehouse/... paths. To reopen an export, extract at /warehouse in an isolated environment and use a compatible PyIceberg SqlCatalog with sqlite:////warehouse/catalog.db. Moving it elsewhere requires a deliberate path relocation; an arbitrary unzip location is not portable. The exported SQLite catalog is an instructional local catalog, not a REST catalog.Export evidence separately to save your code, starting setup, check result and table state. No cloud upload is performed.",
+        "If something failsUse Stop to interrupt a running example, then click Run experiment to start again. Use Reset runtime under Code, files and checks if you need to discard the current Python state. This discards its in-memory warehouse. Reset code restores the original example. If the runtime cannot load, check access to this site’s static assets and available browser memory. Read the worked explanation while it loads; try a current desktop Chrome, Firefox or Safari.",
+        "Sources and further readingApache Iceberg table specificationPyIceberg documentationPyodide runtime documentationApache projects in the browser: Iceberg runtime investigation — source of the adapted compatibility shims and runtime packaging script.Chris Snow’s labs — focused investigations, worked explanations and evidence-led learning.",
+        "Start investigating →Course overview"
+      ]
+    },
+    "#lesson/catalog": {
+      "detailCounts": {
+        "total": 4,
+        "topLevel": 3,
+        "labels": [
+          "Code, files and checks (optional)",
+          "Your notes (optional)",
+          "▤ReferencesOfficial sources · reading question and answer comparison",
+          "Compare your explanation"
+        ]
+      },
+      "paragraphs": [
+        "Part 01 / Find the table",
+        "How a query finds its tableLESSON 01 / 42",
+        "Why start here?Suppose your sales data lives in Parquet files. A file tells you what is inside it, but a folder listing cannot reliably tell you which files form the current table. What if a writer has uploaded new files but has not finished its change? Which version should a dashboard read?Apache Iceberg is a table format: it adds metadata that describes table states and the files belonging to them. This lets readers use a complete, published table state while writers prepare changes. To understand the performance, safe updates and governance decisions later in this course, we first need to follow how a query finds that state.The first step is the catalog, which maps a table name to its current metadata location. We begin with an empty table to make one distinction visible: a table can already have a name, schema (its columns and types) and metadata before it contains any data files.",
+        "Before you start: be familiar with tables, rows and columns. Basic SQL and reading short Python examples help with the experiments. Iceberg knowledge is not assumed. You can follow the worked explanations without running code. Prerequisites and laboratory guide.",
+        "In this lesson: Find the metadata file that describes an empty table.",
+        "Before you runWhat counts do you expect for rows and data_files in an empty table? Will metadata still name a file?",
+        "Run the example",
+        "An empty shop.orders table is prepared automatically. No orders have been added.Click Run experiment with the code unchanged. Find metadata, rows and data_files in the output.",
+        "The first run loads the lesson tools (about 46 MB of files). This can take a few moments.",
+        "Python example · you can edit thisReset codeEditable Python example",
+        "Run experiment →Stop",
+        "Code, files and checks (optional)How this example workscatalog.list_tables lists table names. table.metadata_location is the address of the table’s metadata file; it is not an order record. files() lists data files used by the current table.Automatic preparationThe page runs the following command before the code in the editor. You do not need to type or run it yourself. Every run recreates this starting state.Check for the original exampleThese checks describe the unchanged example. Editing the code can produce a valid result that differs from them.Run the example to inspect its files.Export warehouse ↓Reset runtimeExport warehouse downloads the table files. Reset runtime discards the current table; Run experiment will reload the tools. Your saved code and notes are kept. Read the preparation and helper code or open the laboratory guide.",
+        "What the result meansWith the original code:The output lists shop.orders and a metadata file address, while rows and data_files are both 0. The table already has a name and column definitions, even though no order data has been written. The catalog records where that definition is stored.",
+        "A name leads to metadata before it leads to rowsLookupshop.ordersCatalog entryCurrent metadataData-file referencesThe empty table has a name, a catalog entry and metadata. That metadata does not yet refer to any data files.This diagram shows the original example. It does not update when you edit the code.",
+        "Try one changeAdd append(0) as the first line in the editor, then click Run experiment again. This adds 40 orders before the inspection. Which output values change?",
+        "Check your understandingWhat does the catalog resolve?A table name to its metadata locationA row ID to a byte offsetA SQL query to its final answerCheck explanation →",
+        "Your notes (optional)These notes are saved in this browser. They are not submitted or graded.Your prediction and whyExplain it in your own wordsWhat did you notice, and why does it matter?",
+        "Track your reading even without running code.Mark reviewed",
+        "▤ReferencesOfficial sources · reading question and answer comparisonApache Iceberg specification · table metadataThis section of the specification explains the format rule behind the lesson. This lab uses PyIceberg 0.11.1 with format-v2 examples; the specification also covers newer versions, so check a feature’s version before expecting it to work here.PyIceberg documentation · Read the code that prepares this exampleInvestigate in the sourceWhich information exists before the first data file is written?Find the relevant rule in the linked section. Write or think through an answer, then open the comparison below.Compare your explanationThe catalog records which metadata file currently describes a named table. That metadata describes the table’s columns and the files used by its current state.The empty table has a name, a catalog entry and metadata. That metadata does not yet refer to any data files.",
+        "← Course overviewSee the learning pathNext lesson →A directory is not a table"
+      ]
+    },
+    "#lesson/bounds": {
+      "detailCounts": {
+        "total": 6,
+        "topLevel": 4,
+        "labels": [
+          "Code, files and checks (optional)",
+          "Your notes (optional)",
+          "▷Watch a predicate exclude files51 sec · Video, captions and transcript",
+          "Read the transcript",
+          "▤ReferencesOfficial sources · reading question and answer comparison",
+          "Compare your explanation"
+        ]
+      },
+      "paragraphs": [
+        "Part 03 / Read less",
+        "Skip files with boundsLESSON 14 / 42",
+        "In this lesson: Pass a predicate to Iceberg and inspect file pruning.A file’s bounds summarize its lowest and highest stored values. Iceberg can skip a file when those bounds prove that it cannot contain the requested order.",
+        "Before you runWhich of the three files can contain order_id 1005?",
+        "Run the example",
+        "The three files contain order IDs 0–39, 1000–1039 and 2000–2039. The query looks for ID 1005.Click Run experiment. Compare all with pruned, then read the matching row printed last.",
+        "The first run loads the lesson tools (about 46 MB of files). This can take a few moments.",
+        "Python example · you can edit thisReset codeEditable Python example",
+        "Run experiment →Stop",
+        "Code, files and checks (optional)How this example worksmetrics passes its condition to Iceberg’s file planner. table.scan(row_filter=…) applies the condition when reading the selected data.Automatic preparationThe page runs the following command before the code in the editor. You do not need to type or run it yourself. Every run recreates this starting state.Check for the original exampleThese checks describe the unchanged example. Editing the code can produce a valid result that differs from them.Run the example to inspect its files.Export warehouse ↓Reset runtimeExport warehouse downloads the table files. Reset runtime discards the current table; Run experiment will reload the tools. Your saved code and notes are kept. Read the preparation and helper code or open the laboratory guide.",
+        "What the result meansWith the original code:For order 1005, Iceberg selects the file covering IDs 1000–1039. That file contains 40 candidate records; the row filter then finds the one matching order. selected_file_bytes adds up selected file sizes. It does not measure bytes read from storage.",
+        "Exclude ranges that cannot contain the targetTarget: ID 10050–39: exclude1000–1039: keep2000–2039: excludeThen40 candidate rowsEvaluate row filter1 matching rowKeeping a range proves only that the target might occur there. It does not prove every row matches.This diagram shows the original example. It does not update when you edit the code.",
+        "Try one changeReplace both occurrences of 1005 with 999999 in the editor and run again. How many files can contain that value?",
+        "Check your understandingWhat does a bound prove?Every value inside the range existsA matching file contains only matching rowsA file can be ruled out when its range cannot matchCheck explanation →",
+        "Your notes (optional)These notes are saved in this browser. They are not submitted or graded.Your prediction and whyExplain it in your own wordsWhat did you notice, and why does it matter?",
+        "Track your reading even without running code.Mark reviewed",
+        "▷Watch a predicate exclude files51 sec · Video, captions and transcriptNarrated concept recap · synthetic voice · fixed illustration, not an experiment recording. Use fullscreen for diagram detail.If playback is unavailable, use the transcript below. Download the video (0.5 MB).Read the transcriptOne result can require much more workA query returning one order does not prove that the reader inspected one row. Iceberg first uses metadata to choose candidate files. Rows in a kept file can still fail the row filter.Test each file’s rangeThe example has three files with order identifier ranges that do not overlap. For order one thousand and five, the ranges zero to thirty nine and two thousand to two thousand and thirty nine cannot match. Only the range one thousand to one thousand and thirty nine is kept.Keep pruning and filtering separateThe remaining file contains forty candidate records, but only one row matches. These are different quantities. Selected file bytes are a sum of file sizes, not measured network traffic. Run the experiment with an Iceberg row filter, then change the target to a value outside every range.▤ReferencesOfficial sources · reading question and answer comparisonApache Iceberg specification · scan planningThis section of the specification explains the format rule behind the lesson. This lab uses PyIceberg 0.11.1 with format-v2 examples; the specification also covers newer versions, so check a feature’s version before expecting it to work here.PyIceberg documentation · Read the code that prepares this exampleInvestigate in the sourceWhy must rows still be filtered after a file is kept?Find the relevant rule in the linked section. Write or think through an answer, then open the comparison below.Compare your explanationFile bounds can prove that a file cannot contain a requested value. Iceberg can then skip that file before reading its data.Keeping a range proves only that the target might occur there. It does not prove every row matches.",
+        "← Previous lessonMeasure the candidate scanNext lesson →Separate pruning from filtering"
+      ]
+    },
+    "interaction/loading": {
+      "detailCounts": {
+        "total": 4,
+        "topLevel": 3,
+        "labels": [
+          "Code, files and checks (optional)",
+          "Your notes (optional)",
+          "▤ReferencesOfficial sources · reading question and answer comparison",
+          "Compare your explanation"
+        ]
+      },
+      "paragraphs": [
+        "Part 01 / Find the table",
+        "How a query finds its tableLESSON 01 / 42",
+        "Why start here?Suppose your sales data lives in Parquet files. A file tells you what is inside it, but a folder listing cannot reliably tell you which files form the current table. What if a writer has uploaded new files but has not finished its change? Which version should a dashboard read?Apache Iceberg is a table format: it adds metadata that describes table states and the files belonging to them. This lets readers use a complete, published table state while writers prepare changes. To understand the performance, safe updates and governance decisions later in this course, we first need to follow how a query finds that state.The first step is the catalog, which maps a table name to its current metadata location. We begin with an empty table to make one distinction visible: a table can already have a name, schema (its columns and types) and metadata before it contains any data files.",
+        "Before you start: be familiar with tables, rows and columns. Basic SQL and reading short Python examples help with the experiments. Iceberg knowledge is not assumed. You can follow the worked explanations without running code. Prerequisites and laboratory guide.",
+        "In this lesson: Find the metadata file that describes an empty table.",
+        "Before you runWhat counts do you expect for rows and data_files in an empty table? Will metadata still name a file?",
+        "Run the example",
+        "An empty shop.orders table is prepared automatically. No orders have been added.Click Run experiment with the code unchanged. Find metadata, rows and data_files in the output.",
+        "Loading Python WASM runtime…",
+        "Python example · you can edit thisReset codeEditable Python example",
+        "Working…Stop",
+        "Code, files and checks (optional)How this example workscatalog.list_tables lists table names. table.metadata_location is the address of the table’s metadata file; it is not an order record. files() lists data files used by the current table.Automatic preparationThe page runs the following command before the code in the editor. You do not need to type or run it yourself. Every run recreates this starting state.Check for the original exampleThese checks describe the unchanged example. Editing the code can produce a valid result that differs from them.Run in progress.Export warehouse ↓Reset runtimeExport warehouse downloads the table files. Reset runtime discards the current table; Run experiment will reload the tools. Your saved code and notes are kept. Read the preparation and helper code or open the laboratory guide.",
+        "What the result meansWith the original code:The output lists shop.orders and a metadata file address, while rows and data_files are both 0. The table already has a name and column definitions, even though no order data has been written. The catalog records where that definition is stored.",
+        "A name leads to metadata before it leads to rowsLookupshop.ordersCatalog entryCurrent metadataData-file referencesThe empty table has a name, a catalog entry and metadata. That metadata does not yet refer to any data files.This diagram shows the original example. It does not update when you edit the code.",
+        "Try one changeAdd append(0) as the first line in the editor, then click Run experiment again. This adds 40 orders before the inspection. Which output values change?",
+        "Check your understandingWhat does the catalog resolve?A table name to its metadata locationA row ID to a byte offsetA SQL query to its final answerCheck explanation →",
+        "Your notes (optional)These notes are saved in this browser. They are not submitted or graded.Your prediction and whyExplain it in your own wordsWhat did you notice, and why does it matter?",
+        "Track your reading even without running code.Mark reviewed",
+        "▤ReferencesOfficial sources · reading question and answer comparisonApache Iceberg specification · table metadataThis section of the specification explains the format rule behind the lesson. This lab uses PyIceberg 0.11.1 with format-v2 examples; the specification also covers newer versions, so check a feature’s version before expecting it to work here.PyIceberg documentation · Read the code that prepares this exampleInvestigate in the sourceWhich information exists before the first data file is written?Find the relevant rule in the linked section. Write or think through an answer, then open the comparison below.Compare your explanationThe catalog records which metadata file currently describes a named table. That metadata describes the table’s columns and the files used by its current state.The empty table has a name, a catalog entry and metadata. That metadata does not yet refer to any data files.",
+        "← Course overviewSee the learning pathNext lesson →A directory is not a table"
+      ]
+    },
+    "interaction/original-result": {
+      "detailCounts": {
+        "total": 4,
+        "topLevel": 3,
+        "labels": [
+          "Code, files and checks (optional)",
+          "Your notes (optional)",
+          "▤ReferencesOfficial sources · reading question and answer comparison",
+          "Compare your explanation"
+        ]
+      },
+      "paragraphs": [
+        "Part 01 / Find the table",
+        "How a query finds its tableLESSON 01 / 42",
+        "Why start here?Suppose your sales data lives in Parquet files. A file tells you what is inside it, but a folder listing cannot reliably tell you which files form the current table. What if a writer has uploaded new files but has not finished its change? Which version should a dashboard read?Apache Iceberg is a table format: it adds metadata that describes table states and the files belonging to them. This lets readers use a complete, published table state while writers prepare changes. To understand the performance, safe updates and governance decisions later in this course, we first need to follow how a query finds that state.The first step is the catalog, which maps a table name to its current metadata location. We begin with an empty table to make one distinction visible: a table can already have a name, schema (its columns and types) and metadata before it contains any data files.",
+        "Before you start: be familiar with tables, rows and columns. Basic SQL and reading short Python examples help with the experiments. Iceberg knowledge is not assumed. You can follow the worked explanations without running code. Prerequisites and laboratory guide.",
+        "In this lesson: Find the metadata file that describes an empty table.",
+        "Before you runWhat counts do you expect for rows and data_files in an empty table? Will metadata still name a file?",
+        "Run the example",
+        "An empty shop.orders table is prepared automatically. No orders have been added.Click Run experiment with the code unchanged. Find metadata, rows and data_files in the output.",
+        "The example has finished.",
+        "Python example · you can edit thisReset codeEditable Python example",
+        "Run experiment →Stop",
+        "Your result",
+        "Code, files and checks (optional)How this example workscatalog.list_tables lists table names. table.metadata_location is the address of the table’s metadata file; it is not an order record. files() lists data files used by the current table.Automatic preparationThe page runs the following command before the code in the editor. You do not need to type or run it yourself. Every run recreates this starting state.Check for the original exampleThese checks describe the unchanged example. Editing the code can produce a valid result that differs from them.Original example checks: passed. Table after this run0 rows · 0 current data files · 0 retained snapshotsSnapshot history and metadata addressFiles on diskThis includes files needed by older snapshots. Select a file to inspect it. The file list is available until the next run or runtime reset.catalog.db (20,480 B)shop/orders/metadata/00000-59a0859d-d868-40f1-8c24-2a43ec098461.metadata.json (743 B)Export evidence ↓Export warehouse ↓Reset runtimeExport warehouse downloads the table files. Reset runtime discards the current table; Run experiment will reload the tools. Your saved code and notes are kept. Read the preparation and helper code or open the laboratory guide.",
+        "What the result meansWith the original code:The output lists shop.orders and a metadata file address, while rows and data_files are both 0. The table already has a name and column definitions, even though no order data has been written. The catalog records where that definition is stored.",
+        "A name leads to metadata before it leads to rowsLookupshop.ordersCatalog entryCurrent metadataData-file referencesThe empty table has a name, a catalog entry and metadata. That metadata does not yet refer to any data files.This diagram shows the original example. It does not update when you edit the code.",
+        "Try one changeAdd append(0) as the first line in the editor, then click Run experiment again. This adds 40 orders before the inspection. Which output values change?",
+        "Check your understandingWhat does the catalog resolve?A table name to its metadata locationA row ID to a byte offsetA SQL query to its final answerCheck explanation →",
+        "Your notes (optional)These notes are saved in this browser. They are not submitted or graded.Your prediction and whyExplain it in your own wordsWhat did you notice, and why does it matter?",
+        "Track your reading even without running code.Mark reviewed",
+        "▤ReferencesOfficial sources · reading question and answer comparisonApache Iceberg specification · table metadataThis section of the specification explains the format rule behind the lesson. This lab uses PyIceberg 0.11.1 with format-v2 examples; the specification also covers newer versions, so check a feature’s version before expecting it to work here.PyIceberg documentation · Read the code that prepares this exampleInvestigate in the sourceWhich information exists before the first data file is written?Find the relevant rule in the linked section. Write or think through an answer, then open the comparison below.Compare your explanationThe catalog records which metadata file currently describes a named table. That metadata describes the table’s columns and the files used by its current state.The empty table has a name, a catalog entry and metadata. That metadata does not yet refer to any data files.",
+        "← Course overviewSee the learning pathNext lesson →A directory is not a table"
+      ]
+    },
+    "interaction/edited-result": {
+      "detailCounts": {
+        "total": 4,
+        "topLevel": 3,
+        "labels": [
+          "Code, files and checks (optional)",
+          "Your notes (optional)",
+          "▤ReferencesOfficial sources · reading question and answer comparison",
+          "Compare your explanation"
+        ]
+      },
+      "paragraphs": [
+        "Part 01 / Find the table",
+        "How a query finds its tableLESSON 01 / 42",
+        "Why start here?Suppose your sales data lives in Parquet files. A file tells you what is inside it, but a folder listing cannot reliably tell you which files form the current table. What if a writer has uploaded new files but has not finished its change? Which version should a dashboard read?Apache Iceberg is a table format: it adds metadata that describes table states and the files belonging to them. This lets readers use a complete, published table state while writers prepare changes. To understand the performance, safe updates and governance decisions later in this course, we first need to follow how a query finds that state.The first step is the catalog, which maps a table name to its current metadata location. We begin with an empty table to make one distinction visible: a table can already have a name, schema (its columns and types) and metadata before it contains any data files.",
+        "Before you start: be familiar with tables, rows and columns. Basic SQL and reading short Python examples help with the experiments. Iceberg knowledge is not assumed. You can follow the worked explanations without running code. Prerequisites and laboratory guide.",
+        "In this lesson: Find the metadata file that describes an empty table.",
+        "Before you runWhat counts do you expect for rows and data_files in an empty table? Will metadata still name a file?",
+        "Run the example",
+        "An empty shop.orders table is prepared automatically. No orders have been added.Click Run experiment with the code unchanged. Find metadata, rows and data_files in the output.",
+        "The example has finished.",
+        "Python example · you can edit thisReset codeEditable Python example",
+        "Run experiment →Stop",
+        "Your resultYour edited example finished. The explanation below describes the original code.",
+        "Code, files and checks (optional)How this example workscatalog.list_tables lists table names. table.metadata_location is the address of the table’s metadata file; it is not an order record. files() lists data files used by the current table.Automatic preparationThe page runs the following command before the code in the editor. You do not need to type or run it yourself. Every run recreates this starting state.Check for the original exampleThese checks describe the unchanged example. Editing the code can produce a valid result that differs from them.Original example checks: passed. You edited the example.Table after this run0 rows · 0 current data files · 0 retained snapshotsSnapshot history and metadata addressFiles on diskThis includes files needed by older snapshots. Select a file to inspect it. The file list is available until the next run or runtime reset.catalog.db (20,480 B)shop/orders/metadata/00000-042f9e81-730f-4949-81ee-89f0368a605e.metadata.json (743 B)Export evidence ↓Export warehouse ↓Reset runtimeExport warehouse downloads the table files. Reset runtime discards the current table; Run experiment will reload the tools. Your saved code and notes are kept. Read the preparation and helper code or open the laboratory guide.",
+        "What the result meansWith the original code:The output lists shop.orders and a metadata file address, while rows and data_files are both 0. The table already has a name and column definitions, even though no order data has been written. The catalog records where that definition is stored.",
+        "A name leads to metadata before it leads to rowsLookupshop.ordersCatalog entryCurrent metadataData-file referencesThe empty table has a name, a catalog entry and metadata. That metadata does not yet refer to any data files.This diagram shows the original example. It does not update when you edit the code.",
+        "Try one changeAdd append(0) as the first line in the editor, then click Run experiment again. This adds 40 orders before the inspection. Which output values change?",
+        "Check your understandingWhat does the catalog resolve?A table name to its metadata locationA row ID to a byte offsetA SQL query to its final answerCheck explanation →",
+        "Your notes (optional)These notes are saved in this browser. They are not submitted or graded.Your prediction and whyExplain it in your own wordsWhat did you notice, and why does it matter?",
+        "Track your reading even without running code.Mark reviewed",
+        "▤ReferencesOfficial sources · reading question and answer comparisonApache Iceberg specification · table metadataThis section of the specification explains the format rule behind the lesson. This lab uses PyIceberg 0.11.1 with format-v2 examples; the specification also covers newer versions, so check a feature’s version before expecting it to work here.PyIceberg documentation · Read the code that prepares this exampleInvestigate in the sourceWhich information exists before the first data file is written?Find the relevant rule in the linked section. Write or think through an answer, then open the comparison below.Compare your explanationThe catalog records which metadata file currently describes a named table. That metadata describes the table’s columns and the files used by its current state.The empty table has a name, a catalog entry and metadata. That metadata does not yet refer to any data files.",
+        "← Course overviewSee the learning pathNext lesson →A directory is not a table"
+      ]
+    },
+    "interaction/error": {
+      "detailCounts": {
+        "total": 4,
+        "topLevel": 3,
+        "labels": [
+          "Code, files and checks (optional)",
+          "Your notes (optional)",
+          "▤ReferencesOfficial sources · reading question and answer comparison",
+          "Compare your explanation"
+        ]
+      },
+      "paragraphs": [
+        "Part 01 / Find the table",
+        "How a query finds its tableLESSON 01 / 42",
+        "Why start here?Suppose your sales data lives in Parquet files. A file tells you what is inside it, but a folder listing cannot reliably tell you which files form the current table. What if a writer has uploaded new files but has not finished its change? Which version should a dashboard read?Apache Iceberg is a table format: it adds metadata that describes table states and the files belonging to them. This lets readers use a complete, published table state while writers prepare changes. To understand the performance, safe updates and governance decisions later in this course, we first need to follow how a query finds that state.The first step is the catalog, which maps a table name to its current metadata location. We begin with an empty table to make one distinction visible: a table can already have a name, schema (its columns and types) and metadata before it contains any data files.",
+        "Before you start: be familiar with tables, rows and columns. Basic SQL and reading short Python examples help with the experiments. Iceberg knowledge is not assumed. You can follow the worked explanations without running code. Prerequisites and laboratory guide.",
+        "In this lesson: Find the metadata file that describes an empty table.",
+        "Before you runWhat counts do you expect for rows and data_files in an empty table? Will metadata still name a file?",
+        "Run the example",
+        "An empty shop.orders table is prepared automatically. No orders have been added.Click Run experiment with the code unchanged. Find metadata, rows and data_files in the output.",
+        "The code stopped. Check the error below, or use Reset code and run again.",
+        "Python example · you can edit thisReset codeEditable Python example",
+        "Run experiment →Stop",
+        "The code stoppedCheck the line you edited, or click Reset code to restore the original example. Then click Run experiment again.",
+        "Code, files and checks (optional)How this example workscatalog.list_tables lists table names. table.metadata_location is the address of the table’s metadata file; it is not an order record. files() lists data files used by the current table.Automatic preparationThe page runs the following command before the code in the editor. You do not need to type or run it yourself. Every run recreates this starting state.Check for the original exampleThese checks describe the unchanged example. Editing the code can produce a valid result that differs from them.Full error messageExport warehouse ↓Reset runtimeExport warehouse downloads the table files. Reset runtime discards the current table; Run experiment will reload the tools. Your saved code and notes are kept. Read the preparation and helper code or open the laboratory guide.",
+        "What the result meansWith the original code:The output lists shop.orders and a metadata file address, while rows and data_files are both 0. The table already has a name and column definitions, even though no order data has been written. The catalog records where that definition is stored.",
+        "A name leads to metadata before it leads to rowsLookupshop.ordersCatalog entryCurrent metadataData-file referencesThe empty table has a name, a catalog entry and metadata. That metadata does not yet refer to any data files.This diagram shows the original example. It does not update when you edit the code.",
+        "Try one changeAdd append(0) as the first line in the editor, then click Run experiment again. This adds 40 orders before the inspection. Which output values change?",
+        "Check your understandingWhat does the catalog resolve?A table name to its metadata locationA row ID to a byte offsetA SQL query to its final answerCheck explanation →",
+        "Your notes (optional)These notes are saved in this browser. They are not submitted or graded.Your prediction and whyExplain it in your own wordsWhat did you notice, and why does it matter?",
+        "Track your reading even without running code.Mark reviewed",
+        "▤ReferencesOfficial sources · reading question and answer comparisonApache Iceberg specification · table metadataThis section of the specification explains the format rule behind the lesson. This lab uses PyIceberg 0.11.1 with format-v2 examples; the specification also covers newer versions, so check a feature’s version before expecting it to work here.PyIceberg documentation · Read the code that prepares this exampleInvestigate in the sourceWhich information exists before the first data file is written?Find the relevant rule in the linked section. Write or think through an answer, then open the comparison below.Compare your explanationThe catalog records which metadata file currently describes a named table. That metadata describes the table’s columns and the files used by its current state.The empty table has a name, a catalog entry and metadata. That metadata does not yet refer to any data files.",
+        "← Course overviewSee the learning pathNext lesson →A directory is not a table"
+      ]
+    },
+    "interaction/explanation-feedback": {
+      "detailCounts": {
+        "total": 4,
+        "topLevel": 3,
+        "labels": [
+          "Code, files and checks (optional)",
+          "Your notes (optional)",
+          "▤ReferencesOfficial sources · reading question and answer comparison",
+          "Compare your explanation"
+        ]
+      },
+      "paragraphs": [
+        "Part 01 / Find the table",
+        "How a query finds its tableLESSON 01 / 42",
+        "Why start here?Suppose your sales data lives in Parquet files. A file tells you what is inside it, but a folder listing cannot reliably tell you which files form the current table. What if a writer has uploaded new files but has not finished its change? Which version should a dashboard read?Apache Iceberg is a table format: it adds metadata that describes table states and the files belonging to them. This lets readers use a complete, published table state while writers prepare changes. To understand the performance, safe updates and governance decisions later in this course, we first need to follow how a query finds that state.The first step is the catalog, which maps a table name to its current metadata location. We begin with an empty table to make one distinction visible: a table can already have a name, schema (its columns and types) and metadata before it contains any data files.",
+        "Before you start: be familiar with tables, rows and columns. Basic SQL and reading short Python examples help with the experiments. Iceberg knowledge is not assumed. You can follow the worked explanations without running code. Prerequisites and laboratory guide.",
+        "In this lesson: Find the metadata file that describes an empty table.",
+        "Before you runWhat counts do you expect for rows and data_files in an empty table? Will metadata still name a file?",
+        "Run the example",
+        "An empty shop.orders table is prepared automatically. No orders have been added.Click Run experiment with the code unchanged. Find metadata, rows and data_files in the output.",
+        "The code stopped. Check the error below, or use Reset code and run again.",
+        "Python example · you can edit thisReset codeEditable Python example",
+        "Run experiment →Stop",
+        "The code stoppedCheck the line you edited, or click Reset code to restore the original example. Then click Run experiment again.",
+        "Code, files and checks (optional)How this example workscatalog.list_tables lists table names. table.metadata_location is the address of the table’s metadata file; it is not an order record. files() lists data files used by the current table.Automatic preparationThe page runs the following command before the code in the editor. You do not need to type or run it yourself. Every run recreates this starting state.Check for the original exampleThese checks describe the unchanged example. Editing the code can produce a valid result that differs from them.Full error messageExport warehouse ↓Reset runtimeExport warehouse downloads the table files. Reset runtime discards the current table; Run experiment will reload the tools. Your saved code and notes are kept. Read the preparation and helper code or open the laboratory guide.",
+        "What the result meansWith the original code:The output lists shop.orders and a metadata file address, while rows and data_files are both 0. The table already has a name and column definitions, even though no order data has been written. The catalog records where that definition is stored.",
+        "A name leads to metadata before it leads to rowsLookupshop.ordersCatalog entryCurrent metadataData-file referencesThe empty table has a name, a catalog entry and metadata. That metadata does not yet refer to any data files.This diagram shows the original example. It does not update when you edit the code.",
+        "Try one changeAdd append(0) as the first line in the editor, then click Run experiment again. This adds 40 orders before the inspection. Which output values change?",
+        "Check your understandingWhat does the catalog resolve?A table name to its metadata locationA row ID to a byte offsetA SQL query to its final answerCheck explanation →Read “What the result means”, then try again. tables lists shop.orders. metadata is a file address; its generated name can differ on each run. rows and data_files are both 0, so a table definition exists before any order data is written.",
+        "Your notes (optional)These notes are saved in this browser. They are not submitted or graded.Your prediction and whyExplain it in your own wordsWhat did you notice, and why does it matter?",
+        "Track your reading even without running code.Mark reviewed",
+        "▤ReferencesOfficial sources · reading question and answer comparisonApache Iceberg specification · table metadataThis section of the specification explains the format rule behind the lesson. This lab uses PyIceberg 0.11.1 with format-v2 examples; the specification also covers newer versions, so check a feature’s version before expecting it to work here.PyIceberg documentation · Read the code that prepares this exampleInvestigate in the sourceWhich information exists before the first data file is written?Find the relevant rule in the linked section. Write or think through an answer, then open the comparison below.Compare your explanationThe catalog records which metadata file currently describes a named table. That metadata describes the table’s columns and the files used by its current state.The empty table has a name, a catalog entry and metadata. That metadata does not yet refer to any data files.",
+        "← Course overviewSee the learning pathNext lesson →A directory is not a table"
+      ]
+    }
+  }
+}

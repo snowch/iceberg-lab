@@ -21,6 +21,20 @@ for(const l of lessons){
   }catch(error){failed++;console.error('FAIL',l.id,String(error));}
 }
 if(failed)throw new Error(`${failed} WASM lesson(s) failed`);
+// Exercise the concrete edits described under Try one change, including an intentional error.
+const variations=JSON.parse(await readFile('tests/variations.json','utf8'));
+assert.equal(variations.length,lessons.length);
+for(const variation of variations){
+  const lesson=lessons.find(l=>l.id===variation.id);
+  assert.equal(variation.instruction,lesson.change,'Variation copy changed: '+lesson.id);
+  if(variation.expectedError){
+    assert.throws(()=>run(lesson.setup,variation.code,variation.check),new RegExp(variation.expectedError),'Expected teaching error: '+lesson.id);
+  }else{
+    const result=JSON.parse(run(lesson.setup,variation.code,variation.check));
+    assert.equal(result.passed,true,lesson.id+': '+result.feedback+'\n'+result.output);
+  }
+  console.log('PASS variation',lesson.id);
+}
 // Repeat in a different order: no dependency on preceding lesson variables or schema.
 for(const id of ['readd','catalog','partition-evolution','bounds','stale-commit','time-travel']){
   const l=lessons.find(l=>l.id===id);

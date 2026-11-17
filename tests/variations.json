@@ -1,0 +1,296 @@
+[
+  {
+    "id": "catalog",
+    "instruction": "Add `append(0)` as the first line in the editor, then click Run experiment again. This adds 40 orders before the inspection. Which output values change?",
+    "code": "append(0)\nshow({'tables': ['.'.join(name) for name in catalog.list_tables('shop')]})\nshow({'metadata': table.metadata_location,\n      'rows': table.scan().count(),\n      'data_files': len(files())})",
+    "check": "assert table.scan().count() == 40 and len(files()) == 1",
+    "expectedError": null
+  },
+  {
+    "id": "membership",
+    "instruction": "In the editor, replace `[99999]` with `list(range(10))`, then run again. The extra file now has ten rows. Does after change?",
+    "code": "before = table.scan().count()\nextra = Path(table.location().replace('file://','')) / 'data' / 'uncommitted.parquet'\npq.write_table(pa.table({'order_id':list(range(10))}), extra)\nafter = table.scan().count()\nshow({'before':before, 'after':after, 'extra_exists':extra.exists()})",
+    "check": "assert before == after == 120",
+    "expectedError": null
+  },
+  {
+    "id": "metadata",
+    "instruction": "Add `show(metadata['snapshot-log'])` at the end of the editor and run again. How many published state changes are listed?",
+    "code": "metadata_path = Path(table.metadata_location.replace('file://',''))\nmetadata = json.loads(metadata_path.read_text())\nshow({key:metadata[key] for key in ['format-version','current-snapshot-id','current-schema-id','default-spec-id']})\nshow({'schemas':len(metadata['schemas']), 'snapshots':len(metadata['snapshots'])})\nshow(metadata['snapshot-log'])",
+    "check": "assert len(metadata['snapshot-log']) == 3",
+    "expectedError": null
+  },
+  {
+    "id": "manifest-list",
+    "instruction": "Replace `table.current_snapshot()` with `table.metadata.snapshots[0]` in the first line, then run again. Does the earliest state refer to fewer manifests?",
+    "code": "snapshot = table.metadata.snapshots[0]\nmanifest_list = list(read_manifest_list(table.io.new_input(snapshot.manifest_list)))\nshow({'snapshot':str(snapshot.snapshot_id),'manifest_list':snapshot.manifest_list})\nshow([{'path':m.manifest_path,'spec_id':m.partition_spec_id,\n       'added_files':m.added_files_count,'existing_files':m.existing_files_count}\n      for m in manifest_list])",
+    "check": "assert len(manifest_list) == 1",
+    "expectedError": null
+  },
+  {
+    "id": "manifest",
+    "instruction": "In the entries.append dictionary, replace `'path':entry.data_file.file_path,` with `'path':entry.data_file.file_path, 'status':str(entry.status),`. Run again. What status is recorded for each entry?",
+    "code": "entries = []\nfor manifest in table.current_snapshot().manifests(table.io):\n    for entry in manifest.fetch_manifest_entry(table.io):\n        entries.append({'path':entry.data_file.file_path, 'status':str(entry.status),\n                        'rows':entry.data_file.record_count,\n                        'bytes':entry.data_file.file_size_in_bytes})\nshow(entries)\nshow({'manifest_records':sum(e['rows'] for e in entries)})",
+    "check": "assert all('status' in entry for entry in entries)",
+    "expectedError": null
+  },
+  {
+    "id": "parquet-ids",
+    "instruction": "Add `show(str(table.schema()))` at the end of the editor and run again. Do the IDs in the table schema match the stored IDs?",
+    "code": "path = files()[0].file.file_path.replace('file://','')\nparquet = pq.ParquetFile(path)\nfields = [{'name':f.name,'id':(f.metadata or {}).get(b'PARQUET:field_id',b'').decode()}\n          for f in parquet.schema_arrow]\nshow(fields)\nshow(str(table.schema()))",
+    "check": "assert [f['id'] for f in fields] == ['1','2','3']",
+    "expectedError": null
+  },
+  {
+    "id": "snapshots",
+    "instruction": "Add `append(3)` as the first line in the editor and run again. How does the history change after a fourth append?",
+    "code": "append(3)\nchain = history()\nshow(chain)\nshow({'visible_rows':table.scan().count()})",
+    "check": "assert len(chain) == 4",
+    "expectedError": null
+  },
+  {
+    "id": "time-travel",
+    "instruction": "Replace `snapshots[0]` with `snapshots[1]` in the first line and run again. Predict the new then count before looking at it.",
+    "code": "first = table.metadata.snapshots[1].snapshot_id\nthen = sql('SELECT count(*) AS n, sum(amount) AS total FROM orders', first)\nnow = sql('SELECT count(*) AS n, sum(amount) AS total FROM orders')\nshow({'first_snapshot':str(first),'then':then,'now':now})",
+    "check": "assert then[0]['n'] == 80",
+    "expectedError": null
+  },
+  {
+    "id": "immutable",
+    "instruction": "Insert `append(4)` immediately after `append(3)`, then run again. How many original paths are reused and how many new paths appear?",
+    "code": "before = {f.file.file_path for f in files()}\nappend(3)\nappend(4)\nafter = {f.file.file_path for f in files()}\nshow({'reused':len(before & after),'new':len(after-before),'rows':table.scan().count()})",
+    "check": "assert len(after-before) == 2",
+    "expectedError": null
+  },
+  {
+    "id": "rename",
+    "instruction": "Replace every `market` in the editor with `sales_region` and run again. Does another name change require different field IDs or files?",
+    "code": "before = {f.file.file_path for f in files()}\nold_id = table.schema().find_field('region').field_id\nwith table.update_schema() as update:\n    update.rename_column('region','sales_region')\nnew_id = table.schema().find_field('sales_region').field_id\nshow({'old_id':old_id,'new_id':new_id,'same_files':before == {f.file.file_path for f in files()}})\nshow(sql('SELECT sales_region, count(*) AS n FROM orders GROUP BY sales_region ORDER BY sales_region'))",
+    "check": "assert table.schema().find_field('sales_region').field_id == 2",
+    "expectedError": null
+  },
+  {
+    "id": "add-column",
+    "instruction": "Inside the sql(...) call, replace the SQL string with `SELECT count(*) AS missing FROM orders WHERE priority IS NULL`, keeping the quotes around it. Then run again. Does missing account for all 120 orders?",
+    "code": "with table.update_schema() as update:\n    update.add_column('priority',StringType())\nresult = sql('SELECT count(*) AS missing FROM orders WHERE priority IS NULL')\nshow(result)\nshow([{'name':f.name,'id':f.field_id} for f in table.schema().fields])",
+    "check": "assert result[0]['missing'] == 120",
+    "expectedError": null
+  },
+  {
+    "id": "readd",
+    "instruction": "Replace `DoubleType()` with `StringType()` in the `add_column` call, then run again. Does changing the new column’s type reconnect it to the retired values?",
+    "code": "old_id = table.schema().find_field('amount').field_id\nwith table.update_schema() as update:\n    update.delete_column('amount')\nwith table.update_schema() as update:\n    update.add_column('amount',StringType())\nnew_id = table.schema().find_field('amount').field_id\nresult = sql('SELECT count(amount) AS populated FROM orders')\nshow({'old_id':old_id,'new_id':new_id,'result':result})",
+    "check": "assert result[0]['populated'] == 0",
+    "expectedError": null
+  },
+  {
+    "id": "baseline",
+    "instruction": "Add `show(metrics('order_id = 0'))` at the end of the editor and run again. Does supplying the filter to Iceberg change selected_files?",
+    "code": "baseline = metrics()\nshow(baseline)\nshow(sql('SELECT count(*) AS returned FROM orders WHERE order_id = 0'))\nshow(metrics('order_id = 0'))",
+    "check": "assert metrics('order_id = 0')['selected_files'] == 1",
+    "expectedError": null
+  },
+  {
+    "id": "bounds",
+    "instruction": "Replace both occurrences of `1005` with `999999` in the editor and run again. How many files can contain that value?",
+    "code": "all_files = metrics()\npruned = metrics('order_id = 999999')\nshow({'all':all_files,'pruned':pruned})\nshow(table.scan(row_filter='order_id = 999999').to_arrow())",
+    "check": "assert pruned['selected_files'] == 0",
+    "expectedError": null
+  },
+  {
+    "id": "residual",
+    "instruction": "Replace both `EU` values in the editor with `APAC` and run again. What happens when no file can contain the requested region?",
+    "code": "planned = metrics(\"region = 'APAC'\")\nmatched = table.scan(row_filter=\"region = 'APAC'\").count()\nshow({'plan':planned,'matched_rows':matched})",
+    "check": "assert matched == 0 and planned['selected_files'] == 0",
+    "expectedError": null
+  },
+  {
+    "id": "identity-partition",
+    "instruction": "Replace `metrics(\"region = 'EU'\")` with `metrics('order_id = 1005')` in the editor, then run again. Does a filter on a different column select the same files?",
+    "code": "planned = metrics('order_id = 1005')\nshow(planned)\nshow([{'spec_id':f.file.spec_id,'partition':str(f.file.partition),'rows':f.file.record_count}\n      for f in files()])",
+    "check": "assert planned['selected_files'] == 2",
+    "expectedError": null
+  },
+  {
+    "id": "partition-evolution",
+    "instruction": "Insert `append(4)` immediately after `append(3)`, then run again. How many additional candidate records does the EU scan gain?",
+    "code": "old_paths = {f.file.file_path for f in files()}\nwith table.update_spec() as update:\n    update.add_field('region',IdentityTransform(),'region_part')\nappend(3)\nappend(4)\nshow([{'spec':f.file.spec_id,'partition':str(f.file.partition)} for f in files()])\nshow(metrics(\"region = 'EU'\"))",
+    "check": "assert metrics(\"region = 'EU'\")['candidate_records'] == 160",
+    "expectedError": null
+  },
+  {
+    "id": "hidden-transforms",
+    "instruction": "Replace `end = datetime(2026,1,2,0,30)` with `end = datetime(2026,1,2,0,0)`, then run again. How many days overlap the shorter window?",
+    "code": "from datetime import datetime, timedelta\nstart = datetime(2026,1,1,23,30)\nend = datetime(2026,1,2,0,0)\n# A small day-projection model; this does not write a partitioned table.\ndays = []\ncursor = start.date()\nwhile cursor <= (end-timedelta(microseconds=1)).date():\n    days.append(cursor.isoformat())\n    cursor += timedelta(days=1)\nshow({'half_open_window':[str(start),str(end)],'candidate_days':days})",
+    "check": "assert days == ['2026-01-01']",
+    "expectedError": null
+  },
+  {
+    "id": "small-files",
+    "instruction": "Replace `range(12)` with `range(24)` and `rows=12` with `rows=24`, then run again. How do the file counts compare at the new, equal row count?",
+    "code": "reset(batches=0)\nfor batch in range(24):\n    append(batch, rows=1)\ntiny = {'files':len(files()),'rows':table.scan().count(),'snapshots':len(history())}\nreset(batches=0)\nappend(0, rows=24)\nbulk = {'files':len(files()),'rows':table.scan().count(),'snapshots':len(history())}\nshow({'tiny':tiny,'bulk':bulk})",
+    "check": "assert tiny['rows'] == bulk['rows'] == 24 and tiny['files'] == 24 and bulk['files'] == 1",
+    "expectedError": null
+  },
+  {
+    "id": "compact",
+    "instruction": "Add `show(metrics())` immediately before the line starting with `table.overwrite`, and again at the end of the editor. Run again and compare `selected_file_bytes` as well as `selected_files`.",
+    "code": "before_paths = {f.file.file_path for f in files()}\nbefore_rows = sorted(table.scan().to_arrow().to_pylist(),key=lambda r:r['order_id'])\nshow(metrics())\ntable.overwrite(table.scan().to_arrow())\nafter_rows = sorted(table.scan().to_arrow().to_pylist(),key=lambda r:r['order_id'])\nshow({'before_files':len(before_paths),'after_files':len(files()),\n      'old_files_still_exist':all(Path(p.replace('file://','')).exists() for p in before_paths)})\nshow(metrics())",
+    "check": "assert len(files()) == 1",
+    "expectedError": null
+  },
+  {
+    "id": "delete",
+    "instruction": "Replace `order_id = 0` with `order_id >= 2000` and run again. Does deleting every row in one file require writing a replacement file?",
+    "code": "before = {f.file.file_path for f in files()}\ntable.delete('order_id >= 2000')\nafter = {f.file.file_path for f in files()}\nshow({'removed_from_current':len(before-after),'new_files':len(after-before),\n      'reused_files':len(before & after),'rows':table.scan().count()})",
+    "check": "assert len(after-before) == 0 and table.scan().count() == 80",
+    "expectedError": null
+  },
+  {
+    "id": "deleted-history",
+    "instruction": "Add `show([task.file.file_path for task in files(old)])` at the end of the editor and run again. Which files does the older snapshot still reference?",
+    "code": "old = table.current_snapshot().snapshot_id\ntable.delete('order_id = 0')\ncurrent = sql('SELECT count(*) AS n FROM orders WHERE order_id = 0')\nhistorical = sql('SELECT count(*) AS n FROM orders WHERE order_id = 0',old)\nshow({'current':current,'historical':historical})\nshow([task.file.file_path for task in files(old)])",
+    "check": "assert len(files(old)) == 3",
+    "expectedError": null
+  },
+  {
+    "id": "expire",
+    "instruction": "Add `show(table.scan().count())` at the end of the editor and run again. Does removing the oldest snapshot change the current table’s 120 rows?",
+    "code": "oldest = table.metadata.snapshots[0].snapshot_id\nphysical_before = len(list(Path(ROOT).rglob('*.parquet')))\ntable.maintenance.expire_snapshots().by_id(oldest).commit()\nphysical_after = len(list(Path(ROOT).rglob('*.parquet')))\nshow({'remaining_snapshots':len(history()),'parquet_before':physical_before,'parquet_after':physical_after})\nshow({'expired_id_present':any(s.snapshot_id == oldest for s in table.metadata.snapshots)})\nshow(table.scan().count())",
+    "check": "assert table.scan().count() == 120",
+    "expectedError": null
+  },
+  {
+    "id": "orphans",
+    "instruction": "Add `show(table.scan(snapshot_id=table.metadata.snapshots[0].snapshot_id).count())` at the end of the editor and run again. Can the first snapshot still read its rows?",
+    "code": "table.overwrite(table.scan().to_arrow())\ncurrent_paths = {f.file.file_path for f in files()}\nretained_paths = set()\nfor snapshot in table.metadata.snapshots:\n    retained_paths.update(f.file.file_path for f in files(snapshot.snapshot_id))\nhistorical_only = retained_paths-current_paths\nshow({'current_files':len(current_paths),'retained_files':len(retained_paths),\n      'historical_only':len(historical_only)})\nshow(table.scan(snapshot_id=table.metadata.snapshots[0].snapshot_id).count())",
+    "check": "assert table.scan(snapshot_id=table.metadata.snapshots[0].snapshot_id).count() == 40",
+    "expectedError": null
+  },
+  {
+    "id": "stale-commit",
+    "instruction": "Swap `note_a` and `note_b` throughout the editor, then run again. Which column is now added by the first successful writer?",
+    "code": "from pyiceberg.exceptions import CommitFailedException\nwriter_a = catalog.load_table('shop.orders')\nwriter_b = catalog.load_table('shop.orders')\nchange_a = writer_a.update_schema().add_column('note_b',StringType())\nchange_b = writer_b.update_schema().add_column('note_a',StringType())\nchange_a.commit()\nrejected = False\ntry:\n    change_b.commit()\nexcept CommitFailedException as error:\n    rejected = True\n    print(type(error).__name__, str(error))\ntable = catalog.load_table('shop.orders')\nshow({'second_rejected':rejected,'columns':table.schema().column_names})",
+    "check": "assert rejected and 'note_b' in table.schema().column_names",
+    "expectedError": null
+  },
+  {
+    "id": "retry",
+    "instruction": "Replace `update.add_column('source',StringType())` with `update.add_column('note',StringType())` and run again. Read the error caused by trying to add an existing column; Reset code restores the original example.",
+    "code": "writer_a = catalog.load_table('shop.orders')\nwith writer_a.update_schema() as update:\n    update.add_column('note',StringType())\n# Re-read current state, then apply the independent intended change.\nwriter_b = catalog.load_table('shop.orders')\nwith writer_b.update_schema() as update:\n    update.add_column('note',StringType())\ntable = catalog.load_table('shop.orders')\nshow([{'name':f.name,'id':f.field_id} for f in table.schema().fields])",
+    "check": "",
+    "expectedError": "already exists"
+  },
+  {
+    "id": "atomic-pointer",
+    "instruction": "Replace `expected = 'metadata-v1'` with `expected = 'metadata-v0'`, then run again. Does the pointer change when the expected starting state is wrong?",
+    "code": "# A publication model, not a second catalog implementation.\ncatalog_pointer = 'metadata-v1'\nstates = {'metadata-v1':['file-a']}\nwritten_files = {'file-a','file-b'}\nstates['metadata-v2'] = ['file-a','file-b']\nbefore = list(states[catalog_pointer])\n# Successful atomic compare-and-swap against the expected pointer.\nexpected = 'metadata-v0'\nif catalog_pointer == expected:\n    catalog_pointer = 'metadata-v2'\nafter = list(states[catalog_pointer])\nshow({'before_publish':before,'after_publish':after,'written_files':sorted(written_files)})",
+    "check": "assert after == ['file-a']",
+    "expectedError": null
+  },
+  {
+    "id": "tags",
+    "instruction": "Add `show({name: str(ref.snapshot_id) for name, ref in table.metadata.refs.items()})` at the end of the editor and run again. Which IDs do `main` and `report-close` select?",
+    "code": "pinned = table.current_snapshot().snapshot_id\nwith table.manage_snapshots() as manager:\n    manager.create_tag(pinned,'report-close')\nappend(3)\nref = table.metadata.refs['report-close']\nshow({'tag_snapshot':str(ref.snapshot_id),\n      'current_snapshot':str(table.current_snapshot().snapshot_id),\n      'pinned_rows':table.scan(snapshot_id=ref.snapshot_id).count()})\nshow({name: str(ref.snapshot_id) for name, ref in table.metadata.refs.items()})",
+    "check": "assert table.metadata.refs['main'].snapshot_id != table.metadata.refs['report-close'].snapshot_id",
+    "expectedError": null
+  },
+  {
+    "id": "delete-tradeoff",
+    "instruction": "Change `reads_before_rewrite` from `20` to `200` and run again. Which cost grows while the immediate write quantities stay fixed?",
+    "code": "# Illustrative byte model, not a measured delete-file benchmark.\naffected_file_bytes = 128 * 1024 * 1024\ndelete_bytes = 64 * 1024\nreads_before_rewrite = 200\ncosts = {\n    'copy_on_write_write_bytes':affected_file_bytes,\n    'merge_on_read_delete_write_bytes':delete_bytes,\n    'merge_on_read_extra_delete_read_bytes':delete_bytes*reads_before_rewrite\n}\nshow(costs)",
+    "check": "assert costs['merge_on_read_extra_delete_read_bytes'] == delete_bytes*200",
+    "expectedError": null
+  },
+  {
+    "id": "compatibility",
+    "instruction": "Add `'day-transform'` to the `required` set, leaving the reader sets unchanged, then run again. Which readers now lack a required feature?",
+    "code": "# Explicit illustrative engine capability declarations.\nrequired = {'format-v2','position-deletes','day-transform'}\nreaders = {'reader_a':{'format-v2','position-deletes','equality-deletes'},\n           'reader_b':{'format-v2'}}\nmissing = {name:sorted(required-capabilities) for name,capabilities in readers.items()}\nshow(missing)",
+    "check": "assert 'day-transform' in missing['reader_a'] and 'day-transform' in missing['reader_b']",
+    "expectedError": null
+  },
+  {
+    "id": "discovery-access",
+    "instruction": "Change `'read_object':True` to `'read_object':False` in `permissions` and run again. Which access path is now blocked?",
+    "code": "# Policy model only. Browser code cannot enforce a trusted security boundary.\npermissions = {'list_catalog':False,'read_object':False}\ncan_discover = permissions['list_catalog']\ncan_read_known_path = permissions['read_object']\nshow({'can_discover':can_discover,'can_read_known_path':can_read_known_path})",
+    "check": "assert not can_discover and not can_read_known_path",
+    "expectedError": null
+  },
+  {
+    "id": "row-policy",
+    "instruction": "Replace `row['region'] == 'EU'` with `row['region'] == 'APAC'` in the editor and run again. Does returning no governed rows remove access to the source?",
+    "code": "# A policy model over real data; not trusted enforcement.\nall_rows = table.scan().to_arrow().to_pylist()\ngoverned = [row for row in all_rows if row['region'] == 'APAC']\nshow({'governed_rows':len(governed),'direct_source_rows':len(all_rows)})",
+    "check": "assert len(governed) == 0 and len(all_rows) == 120",
+    "expectedError": null
+  },
+  {
+    "id": "metadata-leak",
+    "instruction": "Add `show({'upper_bounds':str(entry.data_file.upper_bounds)})` at the end of the editor and run again. Why would you also need the field types to interpret those bytes?",
+    "code": "schema_names = table.schema().column_names\nmanifest = table.current_snapshot().manifests(table.io)[0]\nentry = manifest.fetch_manifest_entry(table.io)[0]\nshow({'schema_names':schema_names,'file_path':entry.data_file.file_path,\n      'record_count':entry.data_file.record_count,\n      'lower_bounds_present':bool(entry.data_file.lower_bounds)})\nshow({'upper_bounds':str(entry.data_file.upper_bounds)})",
+    "check": "assert entry.data_file.upper_bounds",
+    "expectedError": null
+  },
+  {
+    "id": "audit",
+    "instruction": "Add `append(3)` followed by `show(sql(query, snapshot))` at the end of the editor and run again. Does the recorded state still return the original report after more data arrives?",
+    "code": "snapshot = table.current_snapshot().snapshot_id\nquery = 'SELECT region, count(*) AS n FROM orders GROUP BY region ORDER BY region'\nresult = sql(query, snapshot)\nrecord = {'table':'shop.orders','snapshot_id':str(snapshot),\n          'metadata_location':table.metadata_location,'schema_id':table.schema().schema_id,\n          'query':query,'result':result,'pyiceberg_version':__import__('pyiceberg').__version__}\nshow(record)\nappend(3)\nshow(sql(query, snapshot))",
+    "check": "assert sum(row['n'] for row in sql(query, snapshot)) == 120 and table.scan().count() == 160",
+    "expectedError": null
+  },
+  {
+    "id": "erasure",
+    "instruction": "Change `'export':True` to `'export':False` and run again. Which locations still need attention?",
+    "code": "# Evidence inventory model; no compliance guarantee is implied.\ncopies = {'current_table':False,'retained_snapshot':True,\n          'object_version':True,'export':False,'backup':True}\nremaining = [name for name,contains_personal_data in copies.items() if contains_personal_data]\nshow({'remaining_locations':remaining,'complete':not remaining})",
+    "check": "assert len(remaining) == 3",
+    "expectedError": null
+  },
+  {
+    "id": "retention-policy",
+    "instruction": "On the line beginning `protected =`, replace the dictionary with `{'s1':'legal hold'}` and run again. Which old snapshot is now eligible under this model’s rules?",
+    "code": "# A policy decision model, not the production expiration implementation.\nsnapshots = [{'id':'s1','age_days':90},{'id':'s2','age_days':40},{'id':'s3','age_days':1}]\nprotected = {'s1':'legal hold'}\ncutoff_days = 30\neligible = [s['id'] for s in snapshots if s['age_days'] > cutoff_days and s['id'] not in protected]\nshow({'protected':protected,'eligible':eligible})",
+    "check": "assert eligible == ['s2']",
+    "expectedError": null
+  },
+  {
+    "id": "workload",
+    "instruction": "Add `show(table.scan(row_filter='order_id = 1005').count())` at the end of the editor and run again. Compare the matching row count with candidate_records for id_query.",
+    "code": "region_query = metrics(\"region = 'EU'\")\nid_query = metrics('order_id = 1005')\nshow({'region_query':region_query,'id_query':id_query})\nshow(table.scan(row_filter='order_id = 1005').count())",
+    "check": "assert table.scan(row_filter='order_id = 1005').count() == 1",
+    "expectedError": null
+  },
+  {
+    "id": "sort-layout",
+    "instruction": "Replace both `'order_id = 5'` conditions with `'order_id >= 0'` and run again. Does the clustered layout still let the planner exclude files for a filter matching every order?",
+    "code": "rows = table.scan().to_arrow().to_pylist()\nreset(batches=0)\nfor offset in range(3):\n    batch = rows[offset::3]\n    table.append(pa.Table.from_pylist(batch,schema=table.schema().as_arrow()))\ninterleaved = metrics('order_id >= 0')\nreset(batches=0)\nfor offset in range(0,120,40):\n    batch = sorted(rows,key=lambda r:r['order_id'])[offset:offset+40]\n    table.append(pa.Table.from_pylist(batch,schema=table.schema().as_arrow()))\nclustered = metrics('order_id >= 0')\nshow({'interleaved':interleaved,'clustered':clustered})",
+    "check": "assert interleaved['selected_files'] == clustered['selected_files'] == 3",
+    "expectedError": null
+  },
+  {
+    "id": "cost-budget",
+    "instruction": "Change `request_ms` from `20` to `0` and run again. Do all three estimates become equal when the model ignores per-request overhead?",
+    "code": "# Simplified serial-request estimate. Not measured cloud latency.\nrequest_ms = 0\nthroughput_bytes_per_ms = 100_000\nbytes_to_read = 12_000_000\nestimates = {str(count):count*request_ms + bytes_to_read/throughput_bytes_per_ms\n             for count in [3,30,300]}\nshow({'estimated_ms_by_file_count':estimates})",
+    "check": "assert len(set(estimates.values())) == 1",
+    "expectedError": null
+  },
+  {
+    "id": "benchmark",
+    "instruction": "In query, replace `sum(amount) AS total` with `sum(amount) AS total, min(order_id) AS first_id, max(order_id) AS last_id`. Run again. Do these additional aggregates still match before and after?",
+    "code": "query = 'SELECT region, count(*) AS n, sum(amount) AS total, min(order_id) AS first_id, max(order_id) AS last_id FROM orders GROUP BY region ORDER BY region'\nbefore = sql(query)\nwork_before = metrics()\ntable.overwrite(table.scan().to_arrow())\nafter = sql(query)\nwork_after = metrics()\nshow({'same_answer':before == after,'before':work_before,'after':work_after,'answer':after})",
+    "check": "assert before == after",
+    "expectedError": null
+  },
+  {
+    "id": "incident",
+    "instruction": "Add `show(metrics(\"region = 'EU'\"))` at the end of the editor and run again. Does one unpartitioned file let the EU query avoid considering US rows?",
+    "code": "before = metrics()\nanswer_before = sql('SELECT region, count(*) AS n, sum(amount) AS total FROM orders GROUP BY region ORDER BY region')\ntable.overwrite(table.scan().to_arrow())\nafter = metrics()\nanswer_after = sql('SELECT region, count(*) AS n, sum(amount) AS total FROM orders GROUP BY region ORDER BY region')\nshow({'before':before,'after':after,'same_answer':answer_before == answer_after})\nshow(metrics(\"region = 'EU'\"))",
+    "check": "assert metrics(\"region = 'EU'\")['candidate_records'] == 480",
+    "expectedError": null
+  },
+  {
+    "id": "recommendation",
+    "instruction": "Replace the `decision` and `next_measurement` strings in the record with your own recommendation and a test that could change your mind. Run again and check that your observations still support the wording.",
+    "code": "baseline = metrics(\"region = 'EU'\")\nanswer = sql(\"SELECT count(*) AS n FROM orders WHERE region = 'EU'\")\nrecord = {\n    'workload':'EU region dashboard',\n    'observed':{'answer':answer,'plan':baseline},\n    'decision':'Compare an EU partition layout while preserving the current report answer',\n    'risks':['more files','rewrite cost','retained history','reader compatibility'],\n    'next_measurement':'Measure requests and candidate records for both region reports and point lookups',\n    'limits':'Browser-local example; no distributed throughput or trusted policy enforcement'\n}\nshow(record)",
+    "check": "assert record['decision'].startswith('Compare an EU partition')",
+    "expectedError": null
+  }
+]

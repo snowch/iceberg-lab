@@ -34,8 +34,9 @@ test('every lesson has actionable learning scaffolds and sections test transfer'
   assert.equal(Object.keys(support).length,lessons.length);
   assert.equal(sectionReviews.length,parts.length);
   for(const l of lessons){
-    for(const key of ['concept','hint','notice'])assert.ok(support[l.id][key].length>35,`${l.id}: ${key}`);
-    assert.notEqual(support[l.id].hint,support[l.id].notice);
+    for(const key of ['concept','prepared','action','explanation','read'])assert.ok(support[l.id][key].length>35,`${l.id}: ${key}`);
+    assert.match(support[l.id].action,/Click Run experiment/);
+    assert.ok(!/Change the setup|Start with zero batches/.test(l.change+support[l.id].action));
   }
   for(const [,scenario,rubric] of sectionReviews){assert.ok(scenario.length>70);assert.equal(rubric.length,3);}
   for(const path of paths)assert.ok(lessons.some(l=>l.id===path.start));

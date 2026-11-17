@@ -10,9 +10,9 @@ test('real WASM experiment, meaningful check, inspection, export and recovery',a
   expect(requests.some(url=>url.includes('.wasm'))).toBe(false);
   await page.goto('./#lesson/bounds');
   await page.getByRole('button',{name:'Run experiment'}).click();
-  await expect(page.locator('.feedback')).toContainText('Evidence check passed',{timeout:120000});
+  await expect(page.locator('.output pre')).toContainText('candidate_records',{timeout:120000});
   await expect(page.locator('.output pre')).toContainText('"candidate_records": 40');
-  await page.getByText('Inspect warehouse ·',{exact:false}).click();
+  await page.locator('#technical-details>summary').click();
   await page.locator('[data-file]').filter({hasText:'.metadata.json'}).last().click();
   await expect(page.locator('#inspector')).toContainText('current-snapshot-id');
   const zipDownload=page.waitForEvent('download');
@@ -29,13 +29,14 @@ test('real WASM experiment, meaningful check, inspection, export and recovery',a
   await expect(page.locator('#review')).toContainText('Reviewed');
   await page.locator('#code').fill('show(123)');
   await page.getByRole('button',{name:'Run experiment'}).click();
-  await expect(page.locator('.feedback')).toContainText('Check not met');
+  await expect(page.locator('.feedback')).toContainText('Your edited example finished');
+  await expect(page.locator('.feedback.error')).toHaveCount(0);
   await page.locator('#code').fill('raise ValueError("learner experiment")');
   await page.getByRole('button',{name:'Run experiment'}).click();
   await expect(page.locator('.output.error')).toContainText('learner experiment');
   await page.getByRole('button',{name:'Reset code'}).click();
   await page.getByRole('button',{name:'Run experiment'}).click();
-  await expect(page.locator('.feedback')).toContainText('Evidence check passed');
+  await expect(page.locator('.output pre')).toContainText('candidate_records');
   await page.evaluate(()=>window.scrollTo(0,0));
   await page.screenshot({path:'test-results/desktop-lesson.png',fullPage:true});
   await page.reload();
@@ -82,31 +83,34 @@ test('all lesson deep links render and the reading path works without WASM',asyn
   await expect(page.getByRole('heading',{name:'Runtime boundaries'})).toBeVisible();
 });
 
-test('learning notes, progressive hints, actionable feedback and section transfer',async({page})=>{
+test('clear instructions, visible explanations, optional notes and section practice',async({page})=>{
   await page.goto('./#lesson/bounds');
-  await expect(page.locator('.concept')).toContainText('exclusion evidence');
+  await expect(page.locator('.prepared-state')).toContainText('0–39, 1000–1039 and 2000–2039');
+  await expect(page.locator('.run-instructions')).toContainText('Click Run experiment');
+  await expect(page.locator('#worked')).toBeVisible();
+  await expect(page.locator('#experiment details')).toHaveCount(1);
+  await expect(page.locator('.learning-hint,.code-orientation')).toHaveCount(0);
+  await page.locator('.lesson-notes>summary').click();
   await page.getByLabel('Your prediction and why').fill('One file, because the batch ID ranges are disjoint.');
   await page.getByLabel('Explain it in your own words').fill('A kept file is only a candidate.');
-  await page.getByText('Need a starting point?',{exact:true}).click();
-  await expect(page.locator('.learning-hint')).toContainText('1005');
-  await expect(page.locator('.learning-hint details')).not.toHaveAttribute('open','');
-  await page.getByText('What evidence should I look for?',{exact:true}).click();
-  await expect(page.locator('.learning-hint details')).toHaveAttribute('open','');
   await page.getByLabel('Every value inside the range exists').check();
   await page.getByRole('button',{name:'Check explanation'}).click();
-  await expect(page.locator('#quiz-feedback')).toContainText('Separate selected files');
+  await expect(page.locator('#quiz-feedback')).toContainText('selected_files');
   await page.reload();
+  await page.locator('.lesson-notes>summary').click();
   await expect(page.locator('#prediction-note')).toHaveValue('One file, because the batch ID ranges are disjoint.');
   await expect(page.locator('#reflection-note')).toHaveValue('A kept file is only a candidate.');
   await page.goto('./#lesson/catalog');
   await expect(page.locator('#prediction-note')).toHaveValue('');
+  await expect(page.locator('.prepared-state')).toContainText('prepared automatically');
+  await expect(page.locator('.run-instructions')).toContainText('with the code unchanged');
+  await expect(page.locator('.change-box')).toContainText('as the first line in the editor');
+  expect(await page.locator('.lesson details').evaluateAll(elements=>elements.filter(el=>!el.parentElement.closest('details')).length)).toBe(3);
   await page.goto('./#lesson/hidden-transforms');
   await expect(page.locator('.transfer')).toContainText('old queries remain expensive');
   await page.getByText('Review your explanation',{exact:true}).click();
   await expect(page.locator('.transfer li')).toHaveCount(3);
-  await page.getByRole('link',{name:'03 Explain',exact:true}).click();
-  await expect(page.locator('#worked')).toHaveAttribute('open','');
-  await expect(page).toHaveURL(/#lesson\/hidden-transforms$/);
+  await expect(page.locator('#worked')).toBeVisible();
 });
 
 test('concept diagrams, references and prerequisites remain readable across lessons and themes',async({page})=>{

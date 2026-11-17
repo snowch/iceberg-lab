@@ -1,5 +1,8 @@
 # Learning, UX and visual-design review
 
+Historical review of the earlier design. The [course copy audit](course-copy-audit.md) supersedes
+the hint stack, stage navigation and collapsed worked explanations described below.
+
 Scope: all 42 lessons, course entry, lesson reader, feedback, mobile and keyboard flows.
 
 ## Guidance and provenance

@@ -64,7 +64,7 @@ def metrics(predicate=None):
             'selected_file_bytes':sum(x.file.file_size_in_bytes for x in selected)}
 
 def history():
-    return [{'id':str(s.snapshot_id),'parent':str(s.parent_snapshot_id),
+    return [{'id':str(s.snapshot_id),'parent':str(s.parent_snapshot_id) if s.parent_snapshot_id is not None else None,
              'operation':s.summary.operation.value,'sequence':s.sequence_number,
              'schema_id':s.schema_id} for s in table.metadata.snapshots]
 
@@ -156,8 +156,8 @@ def run(setup, code, check):
         with contextlib.redirect_stdout(output):
             exec(check, scope)
         passed = True
-        feedback = 'Evidence check passed. Now explain why the result follows.'
+        feedback = 'Original example checks passed.'
     except Exception as error:
-        feedback = f'Check not met: {type(error).__name__}: {error}. Compare your evidence with the worked result.'
+        feedback = f'The result differs from the original example checks: {type(error).__name__}: {error}.'
     return json.dumps({'output':output.getvalue(), 'passed':passed, 'feedback':feedback,
                        'elapsed_ms':round((time.perf_counter()-start)*1000), 'evidence':evidence()})
